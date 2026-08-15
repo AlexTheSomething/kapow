@@ -78,8 +78,8 @@ class TestScannerEngine(unittest.TestCase):
             requires_root=False,
         )
         self.assertIn("-sV", cmd)
-        self.assertIn("-O", cmd)
-        self.assertIn("--traceroute", cmd)
+        self.assertIn("--version-light", cmd)
+        self.assertIn("--osscan-limit", cmd)
         self.assertIn("-p", cmd)
         self.assertIn("80,443", cmd)
         self.assertIn("-oX", cmd)
@@ -98,7 +98,8 @@ class TestScannerEngine(unittest.TestCase):
         # Intense
         cmd_i = self.engine.build_nmap_command(target="10.0.0.1", scan_type="intense")
         self.assertIn("-T4", cmd_i)
-        self.assertIn("-A", cmd_i)
+        self.assertIn("-sV", cmd_i)
+        self.assertIn("-sC", cmd_i)
 
     def test_get_sample_data(self):
         sample = ScannerEngine.get_sample_data()

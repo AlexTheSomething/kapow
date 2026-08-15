@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { Play, Square, Shield, Lock, Unlock, Target, Layers, Zap, Hash, AlertTriangle, Terminal, Sparkles, FileCode, Check, Wifi, Network } from 'lucide-react';
 
 const SCAN_PROFILES = [
-  { id: 'quick', name: 'Quick Scan', flags: '-T4 -F', desc: 'Fastest scan of top 100 ports (~3-5 sec)' },
-  { id: 'quick_plus', name: 'Quick Scan Plus', flags: '-sV -T4 -O -F', desc: 'Fast service detection & OS probe (~8-12 sec)' },
-  { id: 'comprehensive', name: 'Comprehensive', flags: '-sV -O --traceroute -T4', desc: 'Deep services, OS matches & traceroute hops (~20 sec)' },
-  { id: 'ping_sweep', name: 'Ping Sweep (Discovery)', flags: '-sn -T4', desc: 'Rapid host discovery on /24 subnet (~1-2 sec)' },
-  { id: 'intense', name: 'Intense Scan', flags: '-T4 -A -v', desc: 'Aggressive timing, NSE scripts & traceroute' },
-  { id: 'ports_only', name: 'Port Sweep (No Ping)', flags: '-Pn -T4', desc: 'Skip host discovery, direct port scan' },
+  { id: 'quick', name: 'Quick Scan', flags: '-T4 -F', desc: 'Top 100 ports, fast timing (~2s)' },
+  { id: 'quick_plus', name: 'Quick + Services', flags: '-sV -T4 -F', desc: 'Service versions + OS hint (~10s)' },
+  { id: 'comprehensive', name: 'Comprehensive', flags: '-sV -T4 -F', desc: 'Deep service + OS fingerprint (~15s)' },
+  { id: 'ping_sweep', name: 'Ping Sweep', flags: '-sn -T4', desc: 'Host discovery only, no ports (~1s)' },
+  { id: 'intense', name: 'Intense + Scripts', flags: '-sV -sC -T4', desc: 'Service scan + default NSE scripts (~15s)' },
+  { id: 'ports_only', name: 'Port Sweep (Skip Ping)', flags: '-Pn -T4 -F', desc: 'Direct port scan, bypass host discovery' },
 ];
 
 const TARGET_PRESETS = [

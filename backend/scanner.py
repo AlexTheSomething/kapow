@@ -306,33 +306,35 @@ class ScannerEngine:
         scan_type: str = "quick",
         requires_root: bool = False,
         scripts: Optional[str] = None,
+        output_xml_path: Optional[str] = None,
     ) -> List[str]:
         """
-        Construct strict argument list for Nmap execution with fast timing (-T4) and NSE scripts.
+        Construct optimized argument list for Nmap with fast timing, sane timeouts, and real-time stats.
 
         :param target: IP, CIDR, or hostname.
-        :param ports: Port string (e.g. '22,80,443', '1-1024') or list of port integers.
+        :param ports: Port string or list of port integers.
         :param scan_type: Scan profile ('quick', 'quick_plus', 'comprehensive', 'intense', 'ping_sweep', 'ports_only').
         :param requires_root: Whether to wrap with root elevation.
-        :param scripts: Optional NSE script category or comma-separated list (e.g. 'vuln', 'ssl-cert,http-title').
+        :param scripts: Optional NSE scripts.
+        :param output_xml_path: Temporary XML file path for structured output.
         :return: Command list ready for execution.
         """
         nmap_bin = find_cli_binary("nmap") or "nmap"
         cmd = [nmap_bin]
 
-        # Scan profiles with optimized timing (-T4)
+        # Scan profiles with optimized timing (-T4) and reasonable retries/timeouts
         if scan_type == "ping_sweep":
-            cmd.extend(["-sn", "-T4"])
+            cmd.extend(["-sn", "-T4", "--max-retries", "1"])
         elif scan_type == "quick":
-            cmd.extend(["-T4", "-F"])
+            cmd.extend(["-T4", "-F", "--max-retries", "1"])
         elif scan_type == "quick_plus":
-            cmd.extend(["-sV", "-T4", "-O", "-F", "--version-light"])
+            cmd.extend(["-sV", "--version-light", "-T4", "-F", "--max-retries", "1", "--osscan-limit", "--max-os-tries", "1"])
         elif scan_type == "intense":
-            cmd.extend(["-T4", "-A", "-v"])
+            cmd.extend(["-T4", "-sV", "--version-light", "-F", "-sC", "--max-retries", "1"])
         elif scan_type == "ports_only":
-            cmd.extend(["-Pn", "-T4"])
+            cmd.extend(["-Pn", "-T4", "-F", "--max-retries", "1"])
         else:  # comprehensive
-            cmd.extend(["-sV", "-O", "--traceroute", "-T4"])
+            cmd.extend(["-sV", "-T4", "--version-light", "-F", "--osscan-limit", "--max-os-tries", "1", "--max-retries", "2"])
 
         # Specify ports if provided
         if ports:
@@ -347,8 +349,17 @@ class ScannerEngine:
         if scripts and scripts.strip():
             cmd.extend(["--script", scripts.strip()])
 
-        # Target and output format: XML to stdout
-        cmd.extend(["-oX", "-", target])
+        # Verbosity and real-time stats interval for live feedback
+        cmd.extend(["-v", "--stats-every", "1s"])
+
+        # Output format: XML to file or stdout
+        if output_xml_path:
+            cmd.extend(["-oX", output_xml_path])
+        else:
+            cmd.extend(["-oX", "-"])
+
+        # Target specification
+        cmd.append(target)
 
         if requires_root:
             return build_elevated_command(cmd)
@@ -365,7 +376,7 @@ class ScannerEngine:
         progress_callback: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
         """
-        Execute full asynchronous scanning pipeline with real-time log buffering.
+        Execute full asynchronous scanning pipeline with real-time log streaming.
 
         :param target: Target IP, hostname, or CIDR.
         :param ports: Optional port string.
@@ -394,13 +405,18 @@ class ScannerEngine:
         self._is_running = True
         self._start_time = time.time()
         self._live_logs = []
-        self._status_text = f"Initializing scan on {target}..."
+        self._status_text = f"Initializing {scan_type} scan on {target}..."
 
         stage_info: Dict[str, Any] = {
             "rustscan_used": False,
             "discovered_ports": [],
             "nmap_args": [],
         }
+
+        # Create temporary XML file for clean structured output
+        import tempfile
+        xml_tmp_fd, xml_tmp_path = tempfile.mkstemp(prefix="kapow_scan_", suffix=".xml")
+        os.close(xml_tmp_fd)
 
         try:
             # Stage 1: Optional RustScan fast sweep if rustscan is present
@@ -417,7 +433,7 @@ class ScannerEngine:
                     self._live_logs.append(f"[+] Discovered {len(rust_ports)} open ports via RustScan: {ports}")
 
             # Stage 2: Targeted Nmap scan
-            self._status_text = f"Stage 2/2: Executing Nmap scan on {target}..."
+            self._status_text = f"Stage 2/2: Executing {scan_type} scan on {target}..."
             if progress_callback:
                 progress_callback(self._status_text)
 
@@ -427,6 +443,7 @@ class ScannerEngine:
                 scan_type=scan_type,
                 requires_root=requires_root,
                 scripts=scripts,
+                output_xml_path=xml_tmp_path,
             )
             stage_info["nmap_args"] = nmap_cmd
 
@@ -437,21 +454,52 @@ class ScannerEngine:
             proc = await asyncio.create_subprocess_exec(
                 *nmap_cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             self._current_process = proc
 
-            stdout_bytes, stderr_bytes = await proc.communicate()
+            # Real-time stdout reader loop
+            async def _stream_reader(stream, is_stderr=False):
+                while True:
+                    line_bytes = await stream.readline()
+                    if not line_bytes:
+                        break
+                    line = line_bytes.decode('utf-8', errors='ignore').strip()
+                    if not line:
+                        continue
 
-            raw_stdout = stdout_bytes.decode('utf-8', errors='ignore') if stdout_bytes else ""
-            raw_stderr = stderr_bytes.decode('utf-8', errors='ignore') if stderr_bytes else ""
+                    prefix = "[stderr] " if is_stderr else ""
+                    self._live_logs.append(f"{prefix}{line}")
 
-            if raw_stderr.strip():
-                for line in raw_stderr.strip().splitlines():
-                    self._live_logs.append(f"[stderr] {line}")
+                    # Detect progress and open ports in real-time
+                    if "Discovered open port" in line:
+                        self._status_text = line
+                        if progress_callback:
+                            progress_callback(line)
+                    elif "About " in line and "% done" in line:
+                        self._status_text = line
+                        if progress_callback:
+                            progress_callback(line)
+                    elif "Initiating " in line or "Completed " in line:
+                        self._status_text = line
 
-            if proc.returncode != 0 and not raw_stdout:
-                err_msg = raw_stderr.strip() or f"Nmap exited with code {proc.returncode}"
+            await asyncio.gather(
+                _stream_reader(proc.stdout, is_stderr=False),
+                _stream_reader(proc.stderr, is_stderr=True),
+            )
+            await proc.wait()
+
+            # Read generated XML file
+            raw_stdout = ""
+            if os.path.exists(xml_tmp_path):
+                try:
+                    with open(xml_tmp_path, "r", encoding="utf-8", errors="ignore") as f:
+                        raw_stdout = f.read()
+                except Exception as e:
+                    logger.exception(f"Error reading temp XML output: {e}")
+
+            if not raw_stdout.strip() and proc.returncode != 0:
+                err_msg = f"Nmap exited with code {proc.returncode}"
                 self._live_logs.append(f"[!] Scan failed: {err_msg}")
                 return {
                     "success": False,
@@ -460,7 +508,7 @@ class ScannerEngine:
                     "logs": self._live_logs,
                 }
 
-            self._live_logs.append(f"[+] Received {len(raw_stdout)} bytes XML output. Parsing results...")
+            self._live_logs.append(f"[+] Scan completed ({len(raw_stdout)} bytes XML). Parsing results...")
 
             # Parse XML output with auto-healing parser
             parser = NmapParser(raw_stdout)
@@ -475,7 +523,7 @@ class ScannerEngine:
 
             hosts_count = len(parsed_data.get("hosts", []))
             self._status_text = f"Scan complete: {hosts_count} host(s) discovered."
-            self._live_logs.append(f"[+] Scan completed successfully: {hosts_count} hosts, {len(ag_grid_rows)} open services.")
+            self._live_logs.append(f"[+] Processed: {hosts_count} hosts, {len(ag_grid_rows)} open services.")
 
             scan_payload = {
                 "success": True,
@@ -507,6 +555,11 @@ class ScannerEngine:
         finally:
             self._is_running = False
             self._current_process = None
+            if os.path.exists(xml_tmp_path):
+                try:
+                    os.remove(xml_tmp_path)
+                except Exception:
+                    pass
 
     def cancel_scan(self) -> Dict[str, Any]:
         """
