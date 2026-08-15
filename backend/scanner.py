@@ -358,8 +358,9 @@ class ScannerEngine:
         else:
             cmd.extend(["-oX", "-"])
 
-        # Target specification
-        cmd.append(target)
+        # Target specification (supports space-separated multiple targets from ping sweep)
+        for t in target.split():
+            cmd.append(t.strip())
 
         if requires_root:
             return build_elevated_command(cmd)
@@ -419,26 +420,68 @@ class ScannerEngine:
         os.close(xml_tmp_fd)
 
         try:
-            # Stage 1: Optional RustScan fast sweep if rustscan is present
-            if deps["rustscan"]["installed"] and scan_type in ("comprehensive", "quick", "quick_plus") and not ports:
-                self._status_text = "Stage 1/2: RustScan fast port discovery..."
+            # Stage 0: For subnet/range targets, first do a ping sweep to find live hosts
+            # This prevents false positives from proxy ARP on Windows (all 256 IPs appearing "up")
+            is_subnet = ("/" in target) or ("-" in target and not target.startswith("-"))
+            effective_target = target
+
+            if is_subnet and scan_type != "ping_sweep":
+                self._status_text = f"Stage 1: Ping sweep to discover live hosts on {target}..."
+                self._live_logs.append(f"[*] Running ping sweep on {target} to find live hosts...")
                 if progress_callback:
                     progress_callback(self._status_text)
 
-                rust_ports = await self._run_rustscan_sweep(target, ports)
+                nmap_bin = find_cli_binary("nmap") or "nmap"
+                sweep_cmd = [nmap_bin, "-sn", "-T4", "--max-retries", "1", "-oX", "-", target]
+                self._live_logs.append(f"[*] Sweep command: {' '.join(sweep_cmd)}")
+
+                try:
+                    sweep_proc = await asyncio.create_subprocess_exec(
+                        *sweep_cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    sweep_stdout, sweep_stderr = await sweep_proc.communicate()
+                    sweep_xml = sweep_stdout.decode("utf-8", errors="ignore") if sweep_stdout else ""
+
+                    if sweep_xml.strip():
+                        sweep_parser = NmapParser(sweep_xml)
+                        sweep_data = sweep_parser.parse()
+                        live_hosts = [
+                            h["ip"] for h in sweep_data.get("hosts", [])
+                            if h.get("status", {}).get("state") == "up" and h.get("ip")
+                        ]
+
+                        if live_hosts:
+                            effective_target = " ".join(live_hosts)
+                            self._live_logs.append(f"[+] Ping sweep found {len(live_hosts)} live host(s): {', '.join(live_hosts)}")
+                        else:
+                            self._live_logs.append(f"[!] Ping sweep found 0 live hosts on {target}. Scanning full range as fallback.")
+                    else:
+                        self._live_logs.append(f"[!] Ping sweep returned no XML. Scanning full range as fallback.")
+                except Exception as sweep_err:
+                    self._live_logs.append(f"[!] Ping sweep failed ({sweep_err}). Scanning full range as fallback.")
+
+            # Stage 1: Optional RustScan fast sweep if rustscan is present
+            if deps["rustscan"]["installed"] and scan_type in ("comprehensive", "quick", "quick_plus") and not ports:
+                self._status_text = "RustScan fast port discovery..."
+                if progress_callback:
+                    progress_callback(self._status_text)
+
+                rust_ports = await self._run_rustscan_sweep(effective_target, ports)
                 if rust_ports:
                     stage_info["rustscan_used"] = True
                     stage_info["discovered_ports"] = rust_ports
                     ports = ",".join(str(p) for p in rust_ports)
                     self._live_logs.append(f"[+] Discovered {len(rust_ports)} open ports via RustScan: {ports}")
 
-            # Stage 2: Targeted Nmap scan
-            self._status_text = f"Stage 2/2: Executing {scan_type} scan on {target}..."
+            # Stage 2: Targeted Nmap scan against live hosts only
+            self._status_text = f"Executing {scan_type} scan..."
             if progress_callback:
                 progress_callback(self._status_text)
 
             nmap_cmd = self.build_nmap_command(
-                target=target,
+                target=effective_target,
                 ports=ports,
                 scan_type=scan_type,
                 requires_root=requires_root,
