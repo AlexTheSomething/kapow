@@ -1,0 +1,74 @@
+@import 'ag-grid-community/styles/ag-grid.css';
+@import 'ag-grid-community/styles/ag-theme-quartz.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-dark-950 text-slate-100 font-sans;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom Sleek Dark Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b0f19;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Custom AG Grid Dark Theme Overrides */
+.ag-theme-quartz-dark {
+  --ag-background-color: #0b0f19 !important;
+  --ag-header-background-color: #0f172a !important;
+  --ag-row-hover-color: rgba(6, 182, 212, 0.08) !important;
+  --ag-selected-row-background-color: rgba(6, 182, 212, 0.15) !important;
+  --ag-border-color: #1e293b !important;
+  --ag-header-foreground-color: #94a3b8 !important;
+  --ag-foreground-color: #f1f5f9 !important;
+  --ag-odd-row-background-color: #090d16 !important;
+  --ag-font-family: 'Inter', system-ui, sans-serif !important;
+  --ag-font-size: 13px !important;
+}
+
+.ag-theme-quartz-dark .ag-header-cell-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.ag-theme-quartz-dark .ag-cell {
+  display: flex;
+  align-items: center;
+}
+
+/* Glassmorphism card utilities */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-card-hover {
+  transition: all 0.2s ease-in-out;
+}
+.glass-card-hover:hover {
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 0 25px -5px rgba(6, 182, 212, 0.2);
+}
