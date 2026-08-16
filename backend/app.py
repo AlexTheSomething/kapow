@@ -27,6 +27,7 @@ from backend.telemetry import ping_host, reset_telemetry
 from backend.passive_sniffer import PassiveSnifferEngine
 from backend.scan_store import ScanStore
 from backend.engines import get_fast_sweep_catalogue
+from backend.tag_rules import suggest_tags_for_scan
 
 logger = logging.getLogger(__name__)
 
