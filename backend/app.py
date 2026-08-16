@@ -336,6 +336,13 @@ class BackendAPI:
         except Exception as e:
             return {"success": False, "error": str(e), "engines": []}
 
+    def suggest_tags(self, scan_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate quiet tag suggestions for a completed scan result."""
+        try:
+            return suggest_tags_for_scan(scan_payload)
+        except Exception as e:
+            return {"success": False, "error": str(e), "suggestions": [], "count": 0}
+
     def open_external_url(self, url: str) -> Dict[str, Any]:
         """
         Open external URL in system default browser.

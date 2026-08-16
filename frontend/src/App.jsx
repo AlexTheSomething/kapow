@@ -7,7 +7,8 @@ import HostProfiler from './components/HostProfiler';
 import ConsoleDrawer from './components/ConsoleDrawer';
 import SuggestionPanel from './components/SuggestionPanel';
 import StatusBar from './components/StatusBar';
-import { Network, Table, GitCompare, Terminal, Sparkles, Settings, X } from 'lucide-react';
+import Settings from './components/Settings';
+import { Network, Table, GitCompare, Terminal, Sparkles, Settings as SettingsIcon, X } from 'lucide-react';
 
 export default function App() {
   // ── Scan Form State ──
@@ -330,7 +331,7 @@ export default function App() {
             onClick={() => setShowSettings(!showSettings)}
             className={`p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all ${showSettings ? 'bg-slate-800 text-white' : ''}`}
           >
-            <Settings className="w-4 h-4" />
+            <SettingsIcon className="w-4 h-4" />
           </button>
           {/* Toggle console */}
           <button
@@ -431,6 +432,15 @@ export default function App() {
           onToggle={() => setShowConsole(!showConsole)}
         />
       </div>
+
+      {/* Settings modal */}
+      {showSettings && (
+        <Settings
+          onClose={() => setShowSettings(false)}
+          dependencies={dependencies}
+          onRefreshDeps={refreshEnvironment}
+        />
+      )}
     </div>
   );
 }
