@@ -40,6 +40,7 @@ class BackendAPI:
         self.asset_db = AssetDatabase()
         self.scan_store = ScanStore()
         self.sniffer = PassiveSnifferEngine()
+        self.sniffer.start_listeners()
         self._active_task: Optional[asyncio.Task] = None
 
     def check_dependencies(self) -> Dict[str, Any]:
@@ -317,6 +318,13 @@ class BackendAPI:
         except Exception as e:
             logger.exception("get_passive_discovered_devices error:")
             return {"success": False, "error": str(e), "devices": []}
+
+    def get_passive_listener_status(self) -> Dict[str, Any]:
+        """Return status of each passive listener (ARP, SSDP, mDNS)."""
+        try:
+            return {"success": True, "listeners": self.sniffer.get_listener_status()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def open_external_url(self, url: str) -> Dict[str, Any]:
         """

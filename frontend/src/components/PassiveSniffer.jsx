@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Radio, RefreshCw, Server, Laptop, Cpu, ShieldCheck, Play, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Radio, RefreshCw, Server, Laptop, Cpu, ShieldCheck, Play, ArrowRight, Wifi, Globe } from 'lucide-react';
+
+const METHOD_COLORS = {
+  'ARP Cache (Passive)': 'indigo',
+  'SSDP (Passive)': 'violet',
+  'mDNS (Passive)': 'emerald',
+};
+
+const STATUS_DOT = (status) => {
+  if (status === 'listening') return '🟢';
+  if (status === 'unavailable') return '🟡';
+  return '⚫';
+};
 
 export default function PassiveSniffer({ onGetPassiveDevices, onTargetSelect }) {
   const [devices, setDevices] = useState([]);
   const [isListening, setIsListening] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [listenerStatus, setListenerStatus] = useState(null);
 
   const fetchDevices = async () => {
     if (!onGetPassiveDevices) return;
@@ -21,6 +34,20 @@ export default function PassiveSniffer({ onGetPassiveDevices, onTargetSelect }) 
     }
   };
 
+  // Poll listener status once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        if (window.pywebview?.api?.get_passive_listener_status) {
+          const res = await window.pywebview.api.get_passive_listener_status();
+          if (res?.success && res.listeners) {
+            setListenerStatus(res.listeners);
+          }
+        }
+      } catch (_) {}
+    })();
+  }, []);
+
   useEffect(() => {
     fetchDevices();
     let interval = null;
@@ -31,6 +58,9 @@ export default function PassiveSniffer({ onGetPassiveDevices, onTargetSelect }) 
       if (interval) clearInterval(interval);
     };
   }, [isListening]);
+
+  const ssdpStatus = listenerStatus?.ssdp?.status || 'unknown';
+  const mdnsStatus = listenerStatus?.mdns?.status || 'unknown';
 
   return (
     <div className="flex flex-col h-full w-full bg-dark-950 text-slate-200 overflow-hidden select-none">
@@ -43,13 +73,18 @@ export default function PassiveSniffer({ onGetPassiveDevices, onTargetSelect }) 
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xs font-bold uppercase tracking-wider text-white">
-                ARP Cache Device Discovery
+                Passive Device Discovery
               </h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                PASSIVE LISTENER
+                ZERO PROBES
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">Reads the local OS ARP table (no SYN probes). Shows hosts the machine has recently contacted.</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Listening — ARP cache
+              {ssdpStatus === 'listening' && ' + SSDP'} ({STATUS_DOT(ssdpStatus)})
+              {mdnsStatus === 'listening' && ' + mDNS'} ({STATUS_DOT(mdnsStatus)})
+              {' · '}0 packets transmitted, receive only
+            </p>
           </div>
         </div>
 
@@ -70,7 +105,7 @@ export default function PassiveSniffer({ onGetPassiveDevices, onTargetSelect }) 
             onClick={fetchDevices}
             disabled={isRefreshing}
             className="p-1.5 rounded-xl bg-dark-950 border border-slate-700 text-slate-300 hover:text-white transition-all disabled:opacity-40"
-            title="Refresh ARP table cache"
+            title="Refresh device list"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
@@ -79,12 +114,13 @@ export default function PassiveSniffer({ onGetPassiveDevices, onTargetSelect }) 
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        
         {/* Banner Notice */}
         <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-200 flex items-start gap-3">
           <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
           <p>
-            <strong>Stealth Operating Mode:</strong> In passive mode, Kapow sends <strong>0 probe packets</strong>. Devices are identified strictly by listening to local ARP announcements, broadcast queries, and local OS cache.
+            <strong>Stealth Operating Mode:</strong> Kapow sends <strong>0 probe packets</strong>. Devices
+            are identified by reading the OS ARP cache and listening to local multicast announcements
+            (SSDP and mDNS) — no SYN probes, no pings, no traceroute.
           </p>
         </div>
 
@@ -101,52 +137,87 @@ export default function PassiveSniffer({ onGetPassiveDevices, onTargetSelect }) 
               <thead className="bg-dark-950/80 text-slate-400 font-semibold border-b border-slate-800">
                 <tr>
                   <th className="p-3">IP Address</th>
+                  <th className="p-3">Device Name / Hostname</th>
+                  <th className="p-3">Service / Type</th>
                   <th className="p-3">Physical MAC</th>
-                  <th className="p-3">Hardware Manufacturer / Vendor</th>
+                  <th className="p-3">Hardware Vendor</th>
                   <th className="p-3">Discovery Method</th>
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-mono">
-                {devices.map((d, idx) => (
-                  <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="p-3 font-bold text-cyan-300">
-                      {d.ip}
-                    </td>
-                    <td className="p-3 text-slate-300">
-                      {d.mac || '—'}
-                    </td>
-                    <td className="p-3 font-sans text-white font-medium">
-                      {d.vendor || 'Unknown Vendor'}
-                    </td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-500/20 text-indigo-300 font-semibold">
-                        {d.discovery_method || 'ARP Cache'}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right font-sans">
-                      {onTargetSelect && (
-                        <button
-                          onClick={() => onTargetSelect(d.ip)}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/25 transition-all inline-flex items-center gap-1"
-                        >
-                          <span>Scan Host</span>
-                          <ArrowRight className="w-3 h-3" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {devices.map((d, idx) => {
+                  const methods = (d.discovery_method || '').split(' + ');
+                  return (
+                    <tr key={idx} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="p-3 font-bold text-cyan-300">{d.ip}</td>
+                      <td className="p-3 text-white font-sans font-medium">
+                        {d.hostname || '—'}
+                      </td>
+                      <td className="p-3 text-slate-300 font-sans">
+                        {d.service || '—'}
+                      </td>
+                      <td className="p-3 text-slate-300">{d.mac || '—'}</td>
+                      <td className="p-3 font-sans text-white font-medium">
+                        {d.vendor || '—'}
+                      </td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1">
+                          {methods.map((m, mi) => (
+                            <span
+                              key={mi}
+                              className={`px-2 py-0.5 rounded text-[10px] font-semibold`}
+                              style={{
+                                color: m.includes('SSDP')
+                                  ? '#c4b5fd'
+                                  : m.includes('mDNS')
+                                  ? '#6ee7b7'
+                                  : '#a5b4fc',
+                                background: m.includes('SSDP')
+                                  ? 'rgba(139,92,246,0.2)'
+                                  : m.includes('mDNS')
+                                  ? 'rgba(16,185,129,0.2)'
+                                  : 'rgba(99,102,241,0.2)',
+                                border: `1px solid ${
+                                  m.includes('SSDP')
+                                    ? 'rgba(139,92,246,0.35)'
+                                    : m.includes('mDNS')
+                                    ? 'rgba(16,185,129,0.35)'
+                                    : 'rgba(99,102,241,0.35)'
+                                }`,
+                              }}
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3 text-right font-sans">
+                        {onTargetSelect && (
+                          <button
+                            onClick={() => onTargetSelect(d.ip)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/25 transition-all inline-flex items-center gap-1"
+                          >
+                            <span>Scan Host</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           ) : (
             <div className="p-12 text-center text-slate-500 text-xs italic">
               <Radio className="w-8 h-8 mx-auto mb-2 text-slate-600 animate-pulse" />
-              <span>Listening for local broadcast packets. Devices will appear here as they communicate on the LAN.</span>
+              <span>
+                Listening for ARP cache entries, SSDP NOTIFY packets, and mDNS
+                announcements. Devices will appear as they communicate on the LAN.
+              </span>
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

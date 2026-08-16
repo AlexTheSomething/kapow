@@ -7,10 +7,11 @@ test_kapow_features.py - Automated Unit Tests for Kapow Suite:
 """
 
 import unittest
+import socket
 from backend.net_interfaces import get_network_interfaces, get_primary_interface, _mask_to_cidr
 from backend.launcher import launch_protocol, send_wake_on_lan
 from backend.telemetry import ping_host, reset_telemetry
-from backend.passive_sniffer import PassiveSnifferEngine, lookup_vendor
+from backend.passive_sniffer import PassiveSnifferEngine, lookup_vendor, parse_ssdp_packet, parse_mdns_packet
 
 
 class TestNetInterfaces(unittest.TestCase):
@@ -112,6 +113,52 @@ class TestPassiveSniffer(unittest.TestCase):
         self.assertIsInstance(nodes, list)
         all_nodes = engine.get_discovered_nodes()
         self.assertIsInstance(all_nodes, list)
+
+    def test_parse_ssdp_notify_packet(self):
+        """Parse a real-looking SSDP NOTIFY packet."""
+        packet = (
+            b"NOTIFY * HTTP/1.1\r\n"
+            b"HOST: 239.255.255.250:1900\r\n"
+            b"NT: urn:schemas-upnp-org:device:MediaRenderer:1\r\n"
+            b"USN: uuid:abcd-1234::urn:schemas-upnp-org:device:MediaRenderer:1\r\n"
+            b"SERVER: Kodi/20.0 UPnP/1.0\r\n"
+            b"LOCATION: http://192.168.1.50:8080/description.xml\r\n"
+            b"\r\n"
+        )
+        node = parse_ssdp_packet(packet, "192.168.1.50")
+        self.assertIsNotNone(node)
+        self.assertEqual(node["ip"], "192.168.1.50")
+        self.assertIn("SSDP", node["discovery_method"])
+        self.assertIn("Kodi", node["hostname"])
+        self.assertIn("MediaRenderer", node["service"])
+
+    def test_parse_ssdp_notify_empty(self):
+        """Garbage data should return None."""
+        self.assertIsNone(parse_ssdp_packet(b"garbage data here", "1.2.3.4"))
+        self.assertIsNone(parse_ssdp_packet(b"", "1.2.3.4"))
+
+    def test_parse_mdns_packet_a_record(self):
+        """Parse an mDNS response with a single A record."""
+        import struct
+
+        # Build a minimal mDNS response: 1 A record for "tv.local" → 192.168.1.77
+        # Header: ID=0, flags=0x8400 (response, authoritative), QD=0, AN=1, NS=0, AR=0
+        header = struct.pack("!HHHHHH", 0, 0x8400, 0, 1, 0, 0)
+        # Name: "tv.local" as labels: 2 "tv", 5 "local", 0
+        name = b"\x02tv\x05local\x00"
+        # Type A, class IN (with mDNS flush bit = 0x8001), TTL=120, RDLENGTH=4
+        answer = name + struct.pack("!HHIH", 1, 0x8001, 120, 4) + socket.inet_aton("192.168.1.77")
+        packet = header + answer
+
+        node = parse_mdns_packet(packet, "192.168.1.77")
+        self.assertIsNotNone(node)
+        self.assertEqual(node["ip"], "192.168.1.77")
+        self.assertIn("tv.local", node["hostname"])
+
+    def test_parse_mdns_packet_empty(self):
+        """Too-short or garbage data should return None."""
+        self.assertIsNone(parse_mdns_packet(b"", "1.2.3.4"))
+        self.assertIsNone(parse_mdns_packet(b"\x00" * 8, "1.2.3.4"))
 
 
 if __name__ == "__main__":
