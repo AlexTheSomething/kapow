@@ -1,0 +1,4 @@
+# Kapow — Python dependencies
+pywebview>=5.0
+# Optional: safer XML parsing (parsers.py falls back to stdlib if missing)
+defusedxml>=0.7.1

@@ -1,11 +1,11 @@
 """
-backend/passive_sniffer.py - Zero-Noise Passive Network Discovery Engine
+backend/passive_sniffer.py - Local ARP Cache Device Discovery
 
-Passively discovers live LAN devices without transmitting active TCP/SYN probe packets.
-Extracts active devices via:
-1. Passive OS ARP table cache inspection
-2. Local UDP broadcast and multicast listeners (SSDP / mDNS)
-3. Hardware MAC Vendor OUI resolution
+Discovers recently contacted LAN devices by reading the OS ARP cache
+(`arp -a`) — no active TCP/SYN probes are sent. MAC vendor OUI labels
+are resolved from a small built-in dictionary.
+
+Note: This is not a packet sniffer. SSDP/mDNS listeners are not implemented yet.
 """
 
 import logging

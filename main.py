@@ -1,7 +1,7 @@
 """
 main.py - Desktop Application Entry Point
 
-Launches the Zenmap Modern desktop application via PyWebView with Python-to-React IPC bridge.
+Launches Kapow via PyWebView with a Python-to-React IPC bridge.
 """
 
 import argparse
@@ -17,11 +17,11 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] (%(name)s) %(message)s",
 )
-logger = logging.getLogger("zenmap_modern")
+logger = logging.getLogger("kapow")
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Zenmap Modern - Desktop Network Topology & Security Auditor")
+    parser = argparse.ArgumentParser(description="Kapow - Desktop Network Topology & Security Auditor")
     parser.add_argument("--prod", action="store_true", help="Run in production mode loading frontend/dist bundle")
     parser.add_argument("--port", type=int, default=5173, help="Vite dev server port (default: 5173)")
     parser.add_argument("--check", action="store_true", help="Check CLI dependencies and exit")
@@ -42,7 +42,7 @@ def main():
 
     if args.mock:
         sample = ScannerEngine.get_sample_data()
-        print(f"=== Sample Scan Loaded ===")
+        print("=== Sample Scan Loaded ===")
         print(f"Hosts: {len(sample['data']['hosts'])}")
         print(f"AG Grid Rows: {len(sample['ag_grid'])}")
         print(f"Cytoscape Nodes: {len(sample['cytoscape']['nodes'])}, Edges: {len(sample['cytoscape']['edges'])}")
@@ -57,7 +57,7 @@ def main():
 
     # Launch PyWebView desktop application
     is_dev = not args.prod
-    logger.info(f"Starting Zenmap Modern (mode: {'DEV (Vite)' if is_dev else 'PROD (dist)'})...")
+    logger.info("Starting Kapow (mode: %s)...", "DEV (Vite)" if is_dev else "PROD (dist)")
     create_app_window(dev=is_dev, port=args.port)
     webview.start(debug=is_dev)
 

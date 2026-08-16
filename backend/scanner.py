@@ -17,7 +17,14 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Union
 
 # Import parsers and elevation helper
-from parsers import NmapParser, to_ag_grid, to_cytoscape
+from parsers import (
+    NmapParser,
+    filter_hosts_for_inventory,
+    filter_proxy_arp_ghosts,
+    is_credibly_live,
+    to_ag_grid,
+    to_cytoscape,
+)
 from backend.elevation import build_elevated_command, is_elevated
 from backend.asset_db import AssetDatabase
 from backend.cve_lookup import enrich_scan_with_cves
@@ -322,19 +329,45 @@ class ScannerEngine:
         nmap_bin = find_cli_binary("nmap") or "nmap"
         cmd = [nmap_bin]
 
-        # Scan profiles with optimized timing (-T4) and reasonable retries/timeouts
+        # Shared timing guardrails — prevent hung hosts from stalling the whole job
+        timing_guards = [
+            "--max-retries", "1",
+            "--host-timeout", "45s",
+            "--max-rtt-timeout", "800ms",
+            "--initial-rtt-timeout", "300ms",
+        ]
+
+        # Scan profiles with optimized timing (-T4) and sane timeouts
+        # Never use -Pn on raw CIDRs here; pipeline applies -Pn only to pre-discovered hosts.
         if scan_type == "ping_sweep":
-            cmd.extend(["-sn", "-T4", "--max-retries", "1"])
+            cmd.extend(["-sn", "-T4", "--max-retries", "1", "--host-timeout", "15s"])
         elif scan_type == "quick":
-            cmd.extend(["-T4", "-F", "--max-retries", "1"])
+            cmd.extend(["-T4", "-F", *timing_guards])
         elif scan_type == "quick_plus":
-            cmd.extend(["-sV", "--version-light", "-T4", "-F", "--max-retries", "1", "--osscan-limit", "--max-os-tries", "1"])
+            cmd.extend([
+                "-sV", "--version-light", "-T4", "-F",
+                "--osscan-limit", "--max-os-tries", "1",
+                *timing_guards,
+            ])
         elif scan_type == "intense":
-            cmd.extend(["-T4", "-sV", "--version-light", "-F", "-sC", "--max-retries", "1"])
+            # Service + default scripts; keep host discovery unless caller already scoped targets
+            cmd.extend([
+                "-T4", "-sV", "--version-light", "-F", "-sC",
+                "--script-timeout", "20s",
+                *timing_guards,
+            ])
         elif scan_type == "ports_only":
-            cmd.extend(["-Pn", "-T4", "-F", "--max-retries", "1"])
+            # Skip ping only for already-scoped targets (single host or post-discovery list)
+            cmd.extend(["-Pn", "-T4", "-F", *timing_guards])
         else:  # comprehensive
-            cmd.extend(["-sV", "-T4", "--version-light", "-F", "--osscan-limit", "--max-os-tries", "1", "--max-retries", "2"])
+            cmd.extend([
+                "-sV", "-T4", "--version-light", "-F",
+                "--osscan-limit", "--max-os-tries", "1",
+                "--max-retries", "2",
+                "--host-timeout", "60s",
+                "--max-rtt-timeout", "800ms",
+                "--initial-rtt-timeout", "300ms",
+            ])
 
         # Specify ports if provided
         if ports:
@@ -345,7 +378,7 @@ class ScannerEngine:
             if ports_arg:
                 cmd.extend(["-p", ports_arg])
 
-        # NSE Scripts if specified
+        # NSE Scripts if specified (avoid duplicating -sC script set when intense already set it)
         if scripts and scripts.strip():
             cmd.extend(["--script", scripts.strip()])
 
@@ -420,19 +453,28 @@ class ScannerEngine:
         os.close(xml_tmp_fd)
 
         try:
-            # Stage 0: For subnet/range targets, first do a ping sweep to find live hosts
-            # This prevents false positives from proxy ARP on Windows (all 256 IPs appearing "up")
+            # Stage 0: For subnet/range targets, first do a ping sweep to find live hosts.
+            # This prevents -Pn / proxy-ARP from treating an entire /24 as alive.
             is_subnet = ("/" in target) or ("-" in target and not target.startswith("-"))
             effective_target = target
+            discovery_hosts: List[Dict[str, Any]] = []
 
-            if is_subnet and scan_type != "ping_sweep":
+            needs_discovery = is_subnet and scan_type != "ping_sweep"
+            # ports_only on a CIDR must still discover first; -Pn is applied only to survivors
+            if needs_discovery:
                 self._status_text = f"Stage 1: Ping sweep to discover live hosts on {target}..."
                 self._live_logs.append(f"[*] Running ping sweep on {target} to find live hosts...")
                 if progress_callback:
                     progress_callback(self._status_text)
 
                 nmap_bin = find_cli_binary("nmap") or "nmap"
-                sweep_cmd = [nmap_bin, "-sn", "-T4", "--max-retries", "1", "-oX", "-", target]
+                sweep_cmd = [
+                    nmap_bin, "-sn", "-T4",
+                    "--max-retries", "1",
+                    "--host-timeout", "15s",
+                    "-oX", "-",
+                    target,
+                ]
                 self._live_logs.append(f"[*] Sweep command: {' '.join(sweep_cmd)}")
 
                 try:
@@ -441,26 +483,73 @@ class ScannerEngine:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
+                    self._current_process = sweep_proc
                     sweep_stdout, sweep_stderr = await sweep_proc.communicate()
+                    self._current_process = None
                     sweep_xml = sweep_stdout.decode("utf-8", errors="ignore") if sweep_stdout else ""
 
                     if sweep_xml.strip():
                         sweep_parser = NmapParser(sweep_xml)
                         sweep_data = sweep_parser.parse()
-                        live_hosts = [
-                            h["ip"] for h in sweep_data.get("hosts", [])
-                            if h.get("status", {}).get("state") == "up" and h.get("ip")
+                        discovery_hosts = [
+                            h for h in sweep_data.get("hosts", [])
+                            if is_credibly_live(h, mode="ping_sweep") and h.get("ip")
                         ]
+                        discovery_hosts = filter_proxy_arp_ghosts(
+                            discovery_hosts,
+                            keep_gateway_candidate=True,
+                        )
+                        live_hosts = [h["ip"] for h in discovery_hosts]
 
                         if live_hosts:
                             effective_target = " ".join(live_hosts)
-                            self._live_logs.append(f"[+] Ping sweep found {len(live_hosts)} live host(s): {', '.join(live_hosts)}")
+                            self._live_logs.append(
+                                f"[+] Ping sweep found {len(live_hosts)} credible live host(s): "
+                                f"{', '.join(live_hosts)}"
+                            )
                         else:
-                            self._live_logs.append(f"[!] Ping sweep found 0 live hosts on {target}. Scanning full range as fallback.")
+                            # Do NOT fall back to scanning the full CIDR — that recreates mass false positives
+                            self._live_logs.append(
+                                f"[!] Ping sweep found 0 credible live hosts on {target}. Stopping."
+                            )
+                            self._status_text = "No live hosts discovered."
+                            empty = {
+                                "metadata": sweep_data.get("metadata", {}),
+                                "summary": {"hosts_up": 0, "hosts_down": 0, "hosts_total": 0},
+                                "hosts": [],
+                            }
+                            return {
+                                "success": True,
+                                "target": target,
+                                "scan_profile": scan_type,
+                                "raw_xml": sweep_xml,
+                                "data": empty,
+                                "ag_grid": [],
+                                "cytoscape": {"nodes": [], "edges": []},
+                                "stage_info": stage_info,
+                                "logs": self._live_logs,
+                                "message": "No live hosts discovered during ping sweep.",
+                            }
                     else:
-                        self._live_logs.append(f"[!] Ping sweep returned no XML. Scanning full range as fallback.")
+                        err_txt = (sweep_stderr or b"").decode("utf-8", errors="ignore")
+                        self._live_logs.append(
+                            f"[!] Ping sweep returned no XML ({err_txt.strip() or 'empty'}). Stopping."
+                        )
+                        return {
+                            "success": False,
+                            "error": "Host discovery (ping sweep) returned no results.",
+                            "stage_info": stage_info,
+                            "logs": self._live_logs,
+                        }
                 except Exception as sweep_err:
-                    self._live_logs.append(f"[!] Ping sweep failed ({sweep_err}). Scanning full range as fallback.")
+                    self._current_process = None
+                    self._live_logs.append(f"[!] Ping sweep failed ({sweep_err}). Aborting subnet scan.")
+                    return {
+                        "success": False,
+                        "error": f"Host discovery failed: {sweep_err}",
+                        "stage_info": stage_info,
+                        "logs": self._live_logs,
+                    }
 
             # Stage 1: Optional RustScan fast sweep if rustscan is present
             if deps["rustscan"]["installed"] and scan_type in ("comprehensive", "quick", "quick_plus") and not ports:
@@ -557,6 +646,9 @@ class ScannerEngine:
             parser = NmapParser(raw_stdout)
             parsed_data = parser.parse()
 
+            # Drop down / -Pn ghosts / proxy-ARP false positives before UI models
+            parsed_data = filter_hosts_for_inventory(parsed_data, scan_type=scan_type)
+
             # Enrich hosts with SQLite asset metadata (aliases, tags, notes)
             for h in parsed_data.get("hosts", []):
                 asset_db.enrich_host(h)
@@ -566,7 +658,7 @@ class ScannerEngine:
 
             hosts_count = len(parsed_data.get("hosts", []))
             self._status_text = f"Scan complete: {hosts_count} host(s) discovered."
-            self._live_logs.append(f"[+] Processed: {hosts_count} hosts, {len(ag_grid_rows)} open services.")
+            self._live_logs.append(f"[+] Processed: {hosts_count} credible hosts, {len(ag_grid_rows)} service rows.")
 
             scan_payload = {
                 "success": True,
@@ -632,7 +724,7 @@ class ScannerEngine:
         :return: Normalized scan dataset including AG Grid rows and Cytoscape elements.
         """
         parser = NmapParser(SAMPLE_NMAP_XML)
-        parsed_data = parser.parse()
+        parsed_data = filter_hosts_for_inventory(parser.parse(), scan_type="comprehensive")
 
         for h in parsed_data.get("hosts", []):
             asset_db.enrich_host(h)

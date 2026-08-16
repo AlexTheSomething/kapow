@@ -4,7 +4,16 @@ test_parsers.py - Unit tests for Nmap XML Parser (parsers.py)
 
 import json
 import unittest
-from parsers import NmapParser, parse_nmap_xml, to_ag_grid, to_cytoscape, safe_parse_xml
+from parsers import (
+    NmapParser,
+    parse_nmap_xml,
+    to_ag_grid,
+    to_cytoscape,
+    safe_parse_xml,
+    is_credibly_live,
+    filter_proxy_arp_ghosts,
+    filter_hosts_for_inventory,
+)
 
 SAMPLE_NMAP_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE nmaprun>
@@ -131,18 +140,15 @@ class TestNmapParser(unittest.TestCase):
         data = parse_nmap_xml(SAMPLE_NMAP_XML)
         rows = to_ag_grid(data)
 
-        # 2 ports on host 1 + 1 port on host 2 + 1 summary for host 3 (down) = 4 rows
-        self.assertEqual(len(rows), 4)
+        # 2 ports on host 1 + 1 port on host 2; down hosts are excluded from grid
+        self.assertEqual(len(rows), 3)
+        self.assertFalse(any(r["ip"] == "192.168.1.99" for r in rows))
 
         row0 = rows[0]
         self.assertEqual(row0["ip"], "192.168.1.1")
         self.assertEqual(row0["port"], 80)
         self.assertEqual(row0["service"], "http")
         self.assertIn("OpenWrt - LuCI", row0["scripts_summary"])
-
-        down_row = [r for r in rows if r["ip"] == "192.168.1.99"][0]
-        self.assertEqual(down_row["status"], "down")
-        self.assertIsNone(down_row["port"])
 
     def test_to_cytoscape(self):
         data = parse_nmap_xml(SAMPLE_NMAP_XML)
@@ -173,6 +179,83 @@ class TestNmapParser(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             safe_parse_xml("<?xml version='1.0'?><notnmap></notnmap>")
+
+    def test_ports_only_requires_open_ports(self):
+        """-Pn marks everything up; inventory must only keep hosts with open ports."""
+        ghost = {
+            "ip": "192.168.1.200",
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "status": {"state": "up", "reason": "user-set"},
+            "ports": [
+                {"portid": 80, "protocol": "tcp", "state": "filtered", "service": {}},
+            ],
+        }
+        live = {
+            "ip": "192.168.1.10",
+            "mac": "11:22:33:44:55:66",
+            "status": {"state": "up", "reason": "user-set"},
+            "ports": [
+                {"portid": 22, "protocol": "tcp", "state": "open", "service": {"name": "ssh"}},
+            ],
+        }
+        self.assertFalse(is_credibly_live(ghost, mode="ports_only"))
+        self.assertTrue(is_credibly_live(live, mode="ports_only"))
+
+        filtered = filter_hosts_for_inventory(
+            {"hosts": [ghost, live], "summary": {}},
+            scan_type="ports_only",
+        )
+        self.assertEqual([h["ip"] for h in filtered["hosts"]], ["192.168.1.10"])
+
+    def test_proxy_arp_ghosts_dropped(self):
+        """Many IPs sharing one MAC with no open ports are proxy-ARP ghosts."""
+        gateway_mac = "54:E6:FC:00:11:22"
+        ghosts = [
+            {
+                "ip": f"192.168.1.{i}",
+                "mac": gateway_mac,
+                "status": {"state": "up", "reason": "arp-response"},
+                "ports": [],
+            }
+            for i in range(1, 12)
+        ]
+        # One real host with unique MAC + open port sharing nothing
+        real = {
+            "ip": "192.168.1.50",
+            "mac": "AC:DE:48:00:22:33",
+            "status": {"state": "up", "reason": "arp-response"},
+            "ports": [{"portid": 22, "state": "open", "protocol": "tcp", "service": {}}],
+        }
+        kept = filter_proxy_arp_ghosts(ghosts + [real], mac_dup_threshold=5)
+        ips = {h["ip"] for h in kept}
+        self.assertEqual(ips, {"192.168.1.50"})
+        self.assertEqual(len([h for h in kept if h.get("mac") == gateway_mac]), 0)
+
+    def test_down_hosts_filtered_from_inventory(self):
+        data = {
+            "hosts": [
+                {
+                    "ip": "192.168.1.1",
+                    "status": {"state": "up", "reason": "arp-response"},
+                    "ports": [{"portid": 80, "state": "open", "protocol": "tcp", "service": {}}],
+                },
+                {
+                    "ip": "192.168.1.2",
+                    "status": {"state": "down", "reason": "no-response"},
+                    "ports": [],
+                },
+                {
+                    "ip": "192.168.1.3",
+                    "status": {"state": "up", "reason": "user-set"},
+                    "ports": [],
+                },
+            ],
+            "summary": {"hosts_up": 3},
+        }
+        filtered = filter_hosts_for_inventory(data, scan_type="intense")
+        ips = [h["ip"] for h in filtered["hosts"]]
+        self.assertEqual(ips, ["192.168.1.1"])
+        self.assertEqual(filtered["summary"]["hosts_up"], 1)
 
 
 if __name__ == "__main__":

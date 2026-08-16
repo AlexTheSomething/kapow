@@ -6,8 +6,8 @@ const SCAN_PROFILES = [
   { id: 'quick_plus', name: 'Quick + Services', flags: '-sV -T4 -F', desc: 'Service versions + OS hint (~10s)' },
   { id: 'comprehensive', name: 'Comprehensive', flags: '-sV -T4 -F', desc: 'Deep service + OS fingerprint (~15s)' },
   { id: 'ping_sweep', name: 'Ping Sweep', flags: '-sn -T4', desc: 'Host discovery only, no ports (~1s)' },
+  { id: 'ports_only', name: 'Port Sweep (Skip Ping)', flags: '-Pn -T4 -F', desc: 'Skip ping on scoped hosts; subnets still discover first' },
   { id: 'intense', name: 'Intense + Scripts', flags: '-sV -sC -T4', desc: 'Service scan + default NSE scripts (~15s)' },
-  { id: 'ports_only', name: 'Port Sweep (Skip Ping)', flags: '-Pn -T4 -F', desc: 'Direct port scan, bypass host discovery' },
 ];
 
 const TARGET_PRESETS = [

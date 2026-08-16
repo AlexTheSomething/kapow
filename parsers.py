@@ -400,17 +400,185 @@ def parse_nmap_xml(xml_input: Union[str, bytes]) -> Dict[str, Any]:
     return parser.parse()
 
 
+# Host discovery reasons that indicate a real L2/L3 response (not -Pn user-set).
+STRONG_UP_REASONS = frozenset({
+    "arp-response",
+    "echo-reply",
+    "syn-ack",
+    "reset",
+    "tcp-response",
+    "udp-response",
+    "localhost-response",
+    "peer",
+    "port-unreach",
+    "net-unreach",
+    "host-unreach",
+    "proto-unreach",
+    "ttl-exceeded",
+})
+
+WEAK_UP_REASONS = frozenset({
+    "user-set",          # -Pn assumed up
+    "unknown-response",
+    "no-response",
+    "none",
+    "",
+})
+
+
+def _open_ports(host: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [p for p in host.get("ports", []) if p.get("state") == "open"]
+
+
+def _closed_ports(host: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [p for p in host.get("ports", []) if p.get("state") == "closed"]
+
+
+def is_credibly_live(host: Dict[str, Any], mode: str = "port_scan") -> bool:
+    """
+    Decide whether a parsed host should appear in inventory/topology.
+
+    mode:
+      - ping_sweep: accept strong discovery reasons only (not user-set)
+      - port_scan: require up + (open ports OR strong reason OR closed-port evidence)
+      - ports_only: require at least one open port ( -Pn invents "up" for everything)
+    """
+    status = host.get("status") or {}
+    state = (status.get("state") or "unknown").lower()
+    reason = (status.get("reason") or "").lower().strip()
+
+    if state != "up":
+        return False
+
+    open_ports = _open_ports(host)
+    closed_ports = _closed_ports(host)
+
+    if mode == "ports_only":
+        return len(open_ports) > 0
+
+    if mode == "ping_sweep":
+        return reason in STRONG_UP_REASONS or (reason and reason not in WEAK_UP_REASONS)
+
+    # Default port_scan / comprehensive inventory
+    if open_ports:
+        return True
+    if reason in STRONG_UP_REASONS:
+        return True
+    if closed_ports and reason not in WEAK_UP_REASONS:
+        return True
+    return False
+
+
+def filter_proxy_arp_ghosts(
+    hosts: List[Dict[str, Any]],
+    mac_dup_threshold: int = 5,
+    keep_gateway_candidate: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    Drop hosts that share an identical MAC with many others (typical Windows/router proxy-ARP
+    false positives where every IP in a /24 appears "up" with the gateway MAC).
+
+    Hosts with open ports are always kept. Unique-MAC hosts are kept.
+    When keep_gateway_candidate=True (discovery stage), retain at most one .1/.254/hostname
+    representative from a duplicate-MAC cluster so the real gateway is not lost.
+    """
+    from collections import defaultdict
+
+    by_mac: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    no_mac: List[Dict[str, Any]] = []
+
+    for host in hosts:
+        mac = (host.get("mac") or "").upper().strip()
+        if mac:
+            by_mac[mac].append(host)
+        else:
+            no_mac.append(host)
+
+    def _gateway_candidate(group: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        for h in group:
+            if h.get("primary_hostname") or h.get("hostname"):
+                return h
+        for suffix in (".1", ".254"):
+            for h in group:
+                if (h.get("ip") or "").endswith(suffix):
+                    return h
+        return None
+
+    kept: List[Dict[str, Any]] = list(no_mac)
+    for mac, group in by_mac.items():
+        if len(group) < mac_dup_threshold:
+            kept.extend(group)
+            continue
+        survivors = [h for h in group if _open_ports(h)]
+        if survivors:
+            kept.extend(survivors)
+            logger.info(
+                "Proxy-ARP filter: MAC %s shared by %d hosts; kept %d with open ports",
+                mac, len(group), len(survivors),
+            )
+        elif keep_gateway_candidate:
+            candidate = _gateway_candidate(group)
+            if candidate:
+                kept.append(candidate)
+                logger.info(
+                    "Proxy-ARP filter: MAC %s shared by %d hosts; kept gateway candidate %s",
+                    mac, len(group), candidate.get("ip"),
+                )
+            else:
+                logger.info(
+                    "Proxy-ARP filter: dropping %d ghost hosts sharing MAC %s",
+                    len(group), mac,
+                )
+        else:
+            logger.info(
+                "Proxy-ARP filter: dropping %d ghost hosts sharing MAC %s",
+                len(group), mac,
+            )
+
+    return kept
+
+
+def filter_hosts_for_inventory(
+    parsed_data: Dict[str, Any],
+    scan_type: str = "quick",
+) -> Dict[str, Any]:
+    """
+    Return a copy of parsed_data with only credibly live hosts for UI/export.
+    Does not mutate the original structure's nested lists in-place beyond hosts list replace.
+    """
+    mode = "ping_sweep" if scan_type == "ping_sweep" else (
+        "ports_only" if scan_type == "ports_only" else "port_scan"
+    )
+    hosts = list(parsed_data.get("hosts") or [])
+    hosts = [h for h in hosts if is_credibly_live(h, mode=mode)]
+    hosts = filter_proxy_arp_ghosts(
+        hosts,
+        keep_gateway_candidate=(scan_type == "ping_sweep"),
+    )
+
+    filtered = dict(parsed_data)
+    filtered["hosts"] = hosts
+    summary = dict(parsed_data.get("summary") or {})
+    summary["hosts_up"] = len(hosts)
+    filtered["summary"] = summary
+    return filtered
+
+
 def to_ag_grid(parsed_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Converts normalized Nmap dictionary output into flat tabular records optimized for AG Grid.
 
     Each row represents a specific service/port found on a host. If a host has no open ports
     or ports scanned, a host summary row is included.
+    Down / non-credible hosts should already be filtered via filter_hosts_for_inventory.
     """
     rows: List[Dict[str, Any]] = []
 
     hosts = parsed_data.get('hosts', [])
     for host in hosts:
+        # Skip explicit down hosts if any slipped through
+        if (host.get("status") or {}).get("state", "").lower() == "down":
+            continue
         ip = host.get('ip', '0.0.0.0')
         ipv6 = host.get('ipv6', '')
         hostname = host.get('primary_hostname', '')
@@ -503,6 +671,9 @@ def to_cytoscape(
     hosts = parsed_data.get('hosts', [])
 
     for host in hosts:
+        if (host.get("status") or {}).get("state", "").lower() == "down":
+            continue
+
         ip = host.get('ip', '0.0.0.0')
         hostname = host.get('primary_hostname', '')
         mac = host.get('mac', '')

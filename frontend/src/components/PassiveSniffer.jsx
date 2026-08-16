@@ -43,13 +43,13 @@ export default function PassiveSniffer({ onGetPassiveDevices, onTargetSelect }) 
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xs font-bold uppercase tracking-wider text-white">
-                Zero-Noise Passive Device Sniffer (Stealth Mode)
+                ARP Cache Device Discovery
               </h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 PASSIVE LISTENER
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">Discovers local devices silently via ARP & broadcast without transmitting SYN probes</p>
+            <p className="text-[11px] text-slate-400">Reads the local OS ARP table (no SYN probes). Shows hosts the machine has recently contacted.</p>
           </div>
         </div>
 

@@ -9,10 +9,10 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+from parsers import NmapParser, to_ag_grid, to_cytoscape, filter_hosts_for_inventory
 from backend.elevation import build_elevated_command, get_elevation_method, is_elevated
 from backend.scanner import ScannerEngine, SAMPLE_NMAP_XML
 from backend.app import BackendAPI
-from parsers import NmapParser, to_ag_grid, to_cytoscape
 
 
 class TestElevation(unittest.TestCase):
@@ -95,11 +95,18 @@ class TestScannerEngine(unittest.TestCase):
         cmd_p = self.engine.build_nmap_command(target="10.0.0.0/24", scan_type="ping_sweep")
         self.assertIn("-sn", cmd_p)
 
-        # Intense
+        # Intense — must not skip host discovery by default
         cmd_i = self.engine.build_nmap_command(target="10.0.0.1", scan_type="intense")
         self.assertIn("-T4", cmd_i)
         self.assertIn("-sV", cmd_i)
         self.assertIn("-sC", cmd_i)
+        self.assertIn("--host-timeout", cmd_i)
+        self.assertNotIn("-Pn", cmd_i)
+
+        # ports_only uses -Pn only for scoped targets
+        cmd_po = self.engine.build_nmap_command(target="10.0.0.1", scan_type="ports_only")
+        self.assertIn("-Pn", cmd_po)
+        self.assertIn("--host-timeout", cmd_po)
 
     def test_get_sample_data(self):
         sample = ScannerEngine.get_sample_data()
@@ -132,6 +139,14 @@ class TestScannerEngine(unittest.TestCase):
         res = self.engine.cancel_scan()
         self.assertTrue(res["success"])
         self.assertFalse(self.engine.is_running)
+
+    def test_get_live_state_shape(self):
+        state = self.engine.get_live_state()
+        self.assertIn("is_scanning", state)
+        self.assertIn("status", state)
+        self.assertIn("elapsed", state)
+        self.assertIn("logs", state)
+        self.assertFalse(state["is_scanning"])
 
 
 class TestBackendAPI(unittest.TestCase):
