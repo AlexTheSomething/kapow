@@ -67,6 +67,33 @@ export default function App() {
             }
           }
         }
+        if (api.list_scan_history && api.get_scan_history_item) {
+          const listed = await api.list_scan_history(20);
+          if (listed?.success && Array.isArray(listed.scans)) {
+            const hydrated = [];
+            for (const meta of listed.scans) {
+              try {
+                const full = await api.get_scan_history_item(meta.id);
+                if (full?.success && full.scan) {
+                  hydrated.push({
+                    id: meta.id,
+                    target: meta.target,
+                    scanProfile: meta.scan_profile,
+                    timestamp: new Date((meta.created_at || 0) * 1000).toLocaleString(),
+                    hostsCount: meta.hosts_count,
+                    data: full.scan,
+                    persisted: true,
+                  });
+                }
+              } catch (e) {
+                console.warn('Failed loading scan history item', meta.id, e);
+              }
+            }
+            if (hydrated.length) {
+              setScanHistory(hydrated);
+            }
+          }
+        }
       } catch (err) {
         console.error('Failed fetching environment info:', err);
       }

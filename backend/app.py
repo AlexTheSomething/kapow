@@ -25,6 +25,7 @@ from backend.net_interfaces import get_network_interfaces, get_primary_interface
 from backend.launcher import launch_protocol, send_wake_on_lan
 from backend.telemetry import ping_host, reset_telemetry
 from backend.passive_sniffer import PassiveSnifferEngine
+from backend.scan_store import ScanStore
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class BackendAPI:
     def __init__(self):
         self.scanner = ScannerEngine()
         self.asset_db = AssetDatabase()
+        self.scan_store = ScanStore()
         self.sniffer = PassiveSnifferEngine()
         self._active_task: Optional[asyncio.Task] = None
 
@@ -84,6 +86,10 @@ class BackendAPI:
                         scripts=scripts,
                     )
                 )
+                if result.get("success") and not result.get("is_sample"):
+                    saved = self.scan_store.save_scan(result)
+                    if saved.get("success"):
+                        result["history_id"] = saved.get("id")
                 return result
             finally:
                 loop.close()
@@ -220,6 +226,32 @@ class BackendAPI:
             return compare_scans(scan_a, scan_b)
         except Exception as e:
             logger.exception("compare_scan_snapshots exception:")
+            return {"success": False, "error": str(e)}
+
+    def list_scan_history(self, limit: int = 50) -> Dict[str, Any]:
+        """List persisted scan snapshots (newest first)."""
+        try:
+            scans = self.scan_store.list_scans(limit=limit)
+            return {"success": True, "scans": scans}
+        except Exception as e:
+            return {"success": False, "error": str(e), "scans": []}
+
+    def get_scan_history_item(self, scan_id: int) -> Dict[str, Any]:
+        """Load a full persisted scan payload by id."""
+        try:
+            payload = self.scan_store.get_scan(int(scan_id))
+            if not payload:
+                return {"success": False, "error": "Scan not found."}
+            return {"success": True, "scan": payload}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def delete_scan_history_item(self, scan_id: int) -> Dict[str, Any]:
+        """Delete one persisted scan snapshot."""
+        try:
+            ok = self.scan_store.delete_scan(int(scan_id))
+            return {"success": ok}
+        except Exception as e:
             return {"success": False, "error": str(e)}
 
     def lookup_cves_api(
