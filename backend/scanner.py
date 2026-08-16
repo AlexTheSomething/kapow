@@ -28,66 +28,14 @@ from parsers import (
 from backend.elevation import build_elevated_command, is_elevated
 from backend.asset_db import AssetDatabase
 from backend.cve_lookup import enrich_scan_with_cves
+from backend.engines import (
+    find_cli_binary,
+    get_available_engines,
+    resolve_fast_sweep_engine,
+)
 
 logger = logging.getLogger(__name__)
 asset_db = AssetDatabase()
-
-
-def find_cli_binary(name: str) -> Optional[str]:
-    """
-    Locate CLI binary executable across PATH, Windows Registry PATH, and common install locations.
-
-    :param name: Executable name, e.g. 'nmap' or 'rustscan'.
-    :return: Absolute path to binary if found, None otherwise.
-    """
-    # 1. Standard PATH lookup
-    found = shutil.which(name)
-    if found:
-        return found
-
-    # 2. On Windows, dynamically read updated User & System PATH from Registry
-    if sys.platform == 'win32':
-        import winreg
-
-        candidate_paths: List[str] = []
-
-        for root_key, sub_key in [
-            (winreg.HKEY_CURRENT_USER, r'Environment'),
-            (winreg.HKEY_LOCAL_MACHINE, r'SYSTEM\CurrentControlSet\Control\Session Manager\Environment'),
-        ]:
-            try:
-                with winreg.OpenKey(root_key, sub_key) as key:
-                    val, _ = winreg.QueryValueEx(key, 'Path')
-                    for p in val.split(';'):
-                        expanded = os.path.expandvars(p.strip())
-                        if expanded and os.path.isdir(expanded):
-                            candidate_paths.append(expanded)
-            except Exception:
-                pass
-
-        # Common known installation paths on Windows
-        candidate_paths.extend([
-            r'E:\Programs\Nmap',
-            r'C:\Program Files (x86)\Nmap',
-            r'C:\Program Files\Nmap',
-            r'C:\ProgramData\chocolatey\bin',
-            os.path.expandvars(r'%USERPROFILE%\scoop\shims'),
-            os.path.expandvars(r'%LOCALAPPDATA%\Programs\Nmap'),
-            os.path.expandvars(r'%LOCALAPPDATA%\Microsoft\WinGet\Packages'),
-        ])
-
-        exts = ['.exe', '.bat', '.cmd', '']
-        for folder in candidate_paths:
-            for ext in exts:
-                candidate = os.path.join(folder, f'{name}{ext}')
-                if os.path.isfile(candidate):
-                    # Synchronize into current process PATH
-                    current_path = os.environ.get('PATH', '')
-                    if folder not in current_path:
-                        os.environ['PATH'] = f"{folder}{os.pathsep}{current_path}"
-                    return candidate
-
-    return None
 
 
 # Sample Nmap XML for offline testing and initial UI preview
@@ -234,73 +182,91 @@ class ScannerEngine:
 
     def check_dependencies(self) -> Dict[str, Any]:
         """
-        Check availability of CLI dependencies (`nmap` and `rustscan`) on system PATH,
-        Windows Registry, or standard installation directories.
+        Check availability of CLI dependencies (nmap, rustscan, masscan, naabu)
+        on system PATH, Windows Registry, or standard installation directories.
 
         :return: Dict containing availability status and binary paths.
         """
-        nmap_path = find_cli_binary("nmap")
-        rustscan_path = find_cli_binary("rustscan")
+        engines = get_available_engines()
 
         return {
             "nmap": {
-                "installed": bool(nmap_path),
-                "path": nmap_path or "",
+                "installed": engines["nmap"]["installed"],
+                "path": engines["nmap"]["path"],
+                "required": True,
             },
             "rustscan": {
-                "installed": bool(rustscan_path),
-                "path": rustscan_path or "",
+                "installed": engines["rustscan"]["installed"],
+                "path": engines["rustscan"]["path"],
             },
+            "masscan": {
+                "installed": engines["masscan"]["installed"],
+                "path": engines["masscan"]["path"],
+            },
+            "naabu": {
+                "installed": engines["naabu"]["installed"],
+                "path": engines["naabu"]["path"],
+            },
+            "fast_sweep_engines": engines["fast_sweep_available"],
             "is_elevated": is_elevated(),
             "platform": sys.platform,
         }
 
-    async def _run_rustscan_sweep(self, target: str, ports: Optional[str] = None) -> Optional[List[int]]:
+    async def _run_fast_sweep(
+        self,
+        target: str,
+        ports: Optional[str] = None,
+        engine_key: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """
-        Stage 1: Execute fast RustScan port sweep if binary is available.
+        Stage 1: Execute fast port sweep using the best available engine
+        (RustScan → Masscan → Naabu, or the explicitly requested engine).
 
         :param target: Host IP, hostname, or CIDR range.
         :param ports: Optional port range (e.g. '1-1000').
-        :return: List of discovered open port integers, or None if rustscan not available/failed.
+        :param engine_key: Optional engine key override ('rustscan', 'masscan', 'naabu').
+        :return: Dict with {'engine': key, 'ports': [...]} or None if unavailable/failed.
         """
-        rustscan_bin = find_cli_binary("rustscan")
-        if not rustscan_bin:
+        adapter = resolve_fast_sweep_engine(preferred=engine_key)
+        if adapter is None:
             return None
 
-        cmd = [rustscan_bin, "-a", target, "-g", "-u", "5000", "--batch-size", "4500"]
-        if ports:
-            cmd.extend(["-r", ports])
+        cmd = adapter.build_cmd(target, ports)
+        engine_label = adapter.label
 
         try:
-            log_line = f"[*] Stage 1/2: Running fast port sweep with RustScan ({' '.join(cmd)})"
+            log_line = (
+                f"[*] Stage 1/2: Running fast port sweep with {engine_label} "
+                f"({' '.join(cmd)})"
+            )
             logger.info(log_line)
             self._live_logs.append(log_line)
 
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             self._current_process = proc
             stdout_bytes, stderr_bytes = await proc.communicate()
 
             if proc.returncode != 0:
-                err_txt = stderr_bytes.decode('utf-8', errors='ignore')
-                self._live_logs.append(f"[!] RustScan non-zero exit ({proc.returncode}): {err_txt}")
+                err_txt = stderr_bytes.decode("utf-8", errors="ignore")
+                self._live_logs.append(
+                    f"[!] {engine_label} non-zero exit ({proc.returncode}): {err_txt}"
+                )
                 return None
 
-            output = stdout_bytes.decode('utf-8', errors='ignore')
-            self._live_logs.append(f"[+] RustScan raw output: {output.strip()}")
+            output = stdout_bytes.decode("utf-8", errors="ignore")
+            self._live_logs.append(f"[+] {engine_label} raw output: {output.strip()}")
 
-            match = re.search(r'\[([\d,\s]+)\]', output)
-            if match:
-                ports_str = match.group(1)
-                found_ports = [int(p.strip()) for p in ports_str.split(',') if p.strip().isdigit()]
-                return sorted(list(set(found_ports))) if found_ports else None
+            found_ports = adapter.parse_stdout(output)
+            if found_ports:
+                return {"engine": adapter.key, "ports": found_ports}
 
         except Exception as e:
-            logger.warning(f"RustScan sweep encountered error: {e}")
-            self._live_logs.append(f"[!] RustScan warning: {e}")
+            logger.warning(f"{engine_label} sweep encountered error: {e}")
+            self._live_logs.append(f"[!] {engine_label} warning: {e}")
         finally:
             self._current_process = None
 
@@ -442,7 +408,8 @@ class ScannerEngine:
         self._status_text = f"Initializing {scan_type} scan on {target}..."
 
         stage_info: Dict[str, Any] = {
-            "rustscan_used": False,
+            "rustscan_used": False,  # legacy key, kept for compatibility
+            "engine_used": None,
             "discovered_ports": [],
             "nmap_args": [],
         }
@@ -551,18 +518,26 @@ class ScannerEngine:
                         "logs": self._live_logs,
                     }
 
-            # Stage 1: Optional RustScan fast sweep if rustscan is present
-            if deps["rustscan"]["installed"] and scan_type in ("comprehensive", "quick", "quick_plus") and not ports:
-                self._status_text = "RustScan fast port discovery..."
+            # Stage 1: Optional fast port sweep via best available engine
+            fast_engines = deps.get("fast_sweep_engines") or []
+            if fast_engines and scan_type in ("comprehensive", "quick", "quick_plus") and not ports:
+                self._status_text = "Fast port discovery (best available engine)..."
                 if progress_callback:
                     progress_callback(self._status_text)
 
-                rust_ports = await self._run_rustscan_sweep(effective_target, ports)
-                if rust_ports:
-                    stage_info["rustscan_used"] = True
-                    stage_info["discovered_ports"] = rust_ports
-                    ports = ",".join(str(p) for p in rust_ports)
-                    self._live_logs.append(f"[+] Discovered {len(rust_ports)} open ports via RustScan: {ports}")
+                sweep_result = await self._run_fast_sweep(effective_target, ports)
+                if sweep_result:
+                    engine_key = sweep_result["engine"]
+                    found_ports = sweep_result["ports"]
+                    stage_info["engine_used"] = engine_key
+                    if engine_key == "rustscan":
+                        stage_info["rustscan_used"] = True
+                    stage_info["discovered_ports"] = found_ports
+                    ports = ",".join(str(p) for p in found_ports)
+                    self._live_logs.append(
+                        f"[+] Discovered {len(found_ports)} open ports via "
+                        f"{engine_key}: {ports}"
+                    )
 
             # Stage 2: Targeted Nmap scan against live hosts only
             self._status_text = f"Executing {scan_type} scan..."
@@ -742,6 +717,7 @@ class ScannerEngine:
             "cytoscape": cytoscape_elements,
             "stage_info": {
                 "rustscan_used": True,
+                "engine_used": "rustscan",
                 "discovered_ports": [22, 53, 80, 135, 443, 445, 3389, 5000],
                 "nmap_args": ["nmap", "-sV", "-O", "--traceroute", "-T4", "-oX", "-", "192.168.1.0/24"],
             },

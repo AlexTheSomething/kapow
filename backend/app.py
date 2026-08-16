@@ -26,6 +26,7 @@ from backend.launcher import launch_protocol, send_wake_on_lan
 from backend.telemetry import ping_host, reset_telemetry
 from backend.passive_sniffer import PassiveSnifferEngine
 from backend.scan_store import ScanStore
+from backend.engines import get_fast_sweep_catalogue
 
 logger = logging.getLogger(__name__)
 
@@ -325,6 +326,14 @@ class BackendAPI:
             return {"success": True, "listeners": self.sniffer.get_listener_status()}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def list_scan_engines(self) -> Dict[str, Any]:
+        """Return catalogue of fast-sweep engines (RustScan/Masscan/Naabu) with availability."""
+        try:
+            catalogue = get_fast_sweep_catalogue()
+            return {"success": True, "engines": catalogue}
+        except Exception as e:
+            return {"success": False, "error": str(e), "engines": []}
 
     def open_external_url(self, url: str) -> Dict[str, Any]:
         """

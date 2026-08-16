@@ -13,6 +13,13 @@ from parsers import NmapParser, to_ag_grid, to_cytoscape, filter_hosts_for_inven
 from backend.elevation import build_elevated_command, get_elevation_method, is_elevated
 from backend.scanner import ScannerEngine, SAMPLE_NMAP_XML
 from backend.app import BackendAPI
+from backend.engines import (
+    MasscanAdapter,
+    NaabuAdapter,
+    RustscanAdapter,
+    get_available_engines,
+    resolve_fast_sweep_engine,
+)
 
 
 class TestElevation(unittest.TestCase):
@@ -66,8 +73,12 @@ class TestScannerEngine(unittest.TestCase):
         deps = self.engine.check_dependencies()
         self.assertIn('nmap', deps)
         self.assertIn('rustscan', deps)
+        self.assertIn('masscan', deps)
+        self.assertIn('naabu', deps)
         self.assertIn('installed', deps['nmap'])
         self.assertIn('installed', deps['rustscan'])
+        self.assertIn('fast_sweep_engines', deps)
+        self.assertIsInstance(deps['fast_sweep_engines'], list)
         self.assertIn('is_elevated', deps)
 
     def test_build_nmap_command_comprehensive(self):
@@ -149,6 +160,77 @@ class TestScannerEngine(unittest.TestCase):
         self.assertFalse(state["is_scanning"])
 
 
+class TestEngineAdapters(unittest.TestCase):
+    """Test fast-sweep engine adapters: command building and output parsing."""
+
+    def test_rustscan_parse_bracket_style(self):
+        adapter = RustscanAdapter()
+        ports = adapter.parse_stdout("Open 192.168.1.1\n[22,80,443,8080]")
+        self.assertEqual(ports, [22, 80, 443, 8080])
+
+    def test_rustscan_parse_open_lines(self):
+        adapter = RustscanAdapter()
+        ports = adapter.parse_stdout("Open 10.0.0.5:22,3306\nOpen 10.0.0.6:80")
+        self.assertEqual(ports, [22, 80, 3306])
+
+    def test_rustscan_parse_garbage(self):
+        adapter = RustscanAdapter()
+        self.assertEqual(adapter.parse_stdout("no ports here"), [])
+        self.assertEqual(adapter.parse_stdout(""), [])
+
+    def test_masscan_parse_json_list(self):
+        adapter = MasscanAdapter()
+        stdout = json.dumps([
+            {
+                "ip": "10.0.0.1",
+                "ports": [
+                    {"port": 22, "proto": "tcp", "status": "open"},
+                    {"port": 80, "proto": "tcp", "status": "open"},
+                    {"port": 9999, "proto": "tcp", "status": "closed"},
+                ],
+            }
+        ])
+        ports = adapter.parse_stdout(stdout)
+        self.assertEqual(ports, [22, 80])
+
+    def test_masscan_parse_config_then_results(self):
+        adapter = MasscanAdapter()
+        stdout = (
+            '{"config": {"rate": 1000}}\n'
+            '[{"ip": "10.0.0.1", "ports": [{"port": 443, "proto": "tcp", "status": "open"}]}]'
+        )
+        ports = adapter.parse_stdout(stdout)
+        self.assertEqual(ports, [443])
+
+    def test_naabu_parse_json_lines(self):
+        adapter = NaabuAdapter()
+        stdout = (
+            '{"host": "10.0.0.1", "ip": "10.0.0.1", "port": 22, "protocol": "tcp"}\n'
+            '{"host": "10.0.0.1", "ip": "10.0.0.1", "port": 8080, "protocol": "tcp"}\n'
+            '{"host": "10.0.0.2", "ip": "10.0.0.2", "port": 80, "protocol": "tcp"}\n'
+        )
+        ports = adapter.parse_stdout(stdout)
+        self.assertEqual(ports, [22, 80, 8080])
+
+    def test_naabu_parse_garbage(self):
+        adapter = NaabuAdapter()
+        self.assertEqual(adapter.parse_stdout("not json"), [])
+        self.assertEqual(adapter.parse_stdout(""), [])
+
+    def test_get_available_engines_shape(self):
+        engines = get_available_engines()
+        for key in ("nmap", "rustscan", "masscan", "naabu"):
+            self.assertIn(key, engines)
+            self.assertIn("installed", engines[key])
+            self.assertIn("path", engines[key])
+        self.assertIsInstance(engines["fast_sweep_available"], list)
+
+    def test_resolve_fast_sweep_engine_none_available(self):
+        with patch("backend.engines.find_cli_binary", return_value=None):
+            adapter = resolve_fast_sweep_engine()
+            self.assertIsNone(adapter)
+
+
 class TestBackendAPI(unittest.TestCase):
     """Test BackendAPI JS bridge methods."""
 
@@ -159,6 +241,8 @@ class TestBackendAPI(unittest.TestCase):
         deps = self.api.check_dependencies()
         self.assertIn("nmap", deps)
         self.assertIn("rustscan", deps)
+        self.assertIn("masscan", deps)
+        self.assertIn("naabu", deps)
 
     def test_load_sample_scan_api(self):
         res = self.api.load_sample_scan()

@@ -11,6 +11,8 @@ export default function Header({
 }) {
   const nmapInstalled = dependencies?.nmap?.installed;
   const rustscanInstalled = dependencies?.rustscan?.installed;
+  const masscanInstalled = dependencies?.masscan?.installed;
+  const naabuInstalled = dependencies?.naabu?.installed;
   const isElevated = dependencies?.is_elevated;
 
   return (
@@ -61,6 +63,32 @@ export default function Header({
         >
           <Cpu className="w-3.5 h-3.5" />
           <span>RustScan {rustscanInstalled ? 'Active' : 'Optional'}</span>
+        </div>
+
+        {/* Masscan Status */}
+        <div 
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
+            masscanInstalled 
+              ? 'bg-violet-500/10 text-violet-400 border-violet-500/20' 
+              : 'bg-slate-800 text-slate-400 border-slate-700/50'
+          }`}
+          title={masscanInstalled ? `Masscan enabled: ${dependencies?.masscan?.path}` : 'Masscan not installed (optional fast-sweep)'}
+        >
+          <Cpu className="w-3.5 h-3.5" />
+          <span>Masscan {masscanInstalled ? 'Active' : 'Optional'}</span>
+        </div>
+
+        {/* Naabu Status */}
+        <div 
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
+            naabuInstalled 
+              ? 'bg-teal-500/10 text-teal-400 border-teal-500/20' 
+              : 'bg-slate-800 text-slate-400 border-slate-700/50'
+          }`}
+          title={naabuInstalled ? `Naabu enabled: ${dependencies?.naabu?.path}` : 'Naabu not installed (optional fast-sweep)'}
+        >
+          <Cpu className="w-3.5 h-3.5" />
+          <span>Naabu {naabuInstalled ? 'Active' : 'Optional'}</span>
         </div>
 
         {/* Privilege Elevation */}
