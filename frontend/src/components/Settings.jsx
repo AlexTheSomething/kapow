@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Clock, Bell, Moon, RefreshCw, Info } from 'lucide-react';
 
 /**
@@ -8,6 +8,48 @@ import { X, Clock, Bell, Moon, RefreshCw, Info } from 'lucide-react';
 export default function Settings({ onClose, dependencies, onRefreshDeps }) {
   const [autoScanEnabled, setAutoScanEnabled] = useState(false);
   const [interval, setIntervalMins] = useState(30);
+  const [scheduleTarget, setScheduleTarget] = useState('');
+  const [scheduleStatus, setScheduleStatus] = useState(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+
+  // Load scheduler status from backend
+  useEffect(() => {
+    (async () => {
+      try {
+        if (window.pywebview?.api?.get_schedule_status) {
+          const res = await window.pywebview.api.get_schedule_status();
+          if (res?.success) {
+            setAutoScanEnabled(!!res.enabled);
+            setIntervalMins(res.interval_minutes || 30);
+            setScheduleTarget(res.target || '');
+            setScheduleStatus(res);
+          }
+        }
+      } catch (_) {}
+    })();
+  }, []);
+
+  const applySchedule = async (enabled, mins, target) => {
+    setScheduleLoading(true);
+    try {
+      if (window.pywebview?.api?.set_schedule_config) {
+        const res = await window.pywebview.api.set_schedule_config(
+          enabled, mins, target || undefined, 'quick'
+        );
+        if (res?.success) setScheduleStatus(res);
+      }
+    } catch (_) {} finally {
+      setScheduleLoading(false);
+    }
+  };
+
+  const toggleSchedule = () => {
+    const next = !autoScanEnabled;
+    setAutoScanEnabled(next);
+    applySchedule(next, interval, scheduleTarget);
+  };
+
+  const fmtTime = (ts) => (ts ? new Date(ts * 1000).toLocaleString() : 'never');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
@@ -35,25 +77,49 @@ export default function Settings({ onClose, dependencies, onRefreshDeps }) {
                 <div className="text-[10px] text-slate-500 mt-0.5">Scan your LAN on a schedule and alert on changes</div>
               </div>
               <button
-                onClick={() => setAutoScanEnabled(!autoScanEnabled)}
-                className={`relative w-10 h-5 rounded-full transition-colors ${autoScanEnabled ? 'bg-brand-cyan' : 'bg-slate-700'}`}
+                onClick={toggleSchedule}
+                disabled={scheduleLoading}
+                className={`relative w-10 h-5 rounded-full transition-colors ${autoScanEnabled ? 'bg-brand-cyan' : 'bg-slate-700'} disabled:opacity-50`}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${autoScanEnabled ? 'left-5' : 'left-0.5'}`} />
               </button>
             </div>
             {autoScanEnabled && (
-              <div className="mt-2 p-3 rounded-xl bg-dark-950 border border-slate-800 flex items-center gap-3 animate-slide-up">
-                <span className="text-xs text-slate-400">Every</span>
-                <input
-                  type="number"
-                  min="5"
-                  max="1440"
-                  value={interval}
-                  onChange={(e) => setIntervalMins(parseInt(e.target.value) || 30)}
-                  className="w-20 bg-dark-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-brand-cyan"
-                />
-                <span className="text-xs text-slate-400">minutes</span>
-                <span className="text-[10px] text-amber-400 ml-auto">Coming soon — scheduling backend lands after the UI rebuild</span>
+              <div className="mt-2 p-3 rounded-xl bg-dark-950 border border-slate-800 space-y-2 animate-slide-up">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-xs text-slate-400">Every</span>
+                  <input
+                    type="number"
+                    min="5"
+                    max="1440"
+                    value={interval}
+                    onChange={(e) => setIntervalMins(parseInt(e.target.value) || 30)}
+                    onBlur={() => applySchedule(true, interval, scheduleTarget)}
+                    className="w-20 bg-dark-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-brand-cyan"
+                  />
+                  <span className="text-xs text-slate-400">minutes</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">Target:</span>
+                  <input
+                    type="text"
+                    value={scheduleTarget}
+                    onChange={(e) => setScheduleTarget(e.target.value)}
+                    onBlur={() => applySchedule(true, interval, scheduleTarget)}
+                    placeholder="192.168.1.0/24"
+                    className="flex-1 bg-dark-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-brand-cyan"
+                  />
+                </div>
+                {scheduleStatus && (
+                  <div className="text-[10px] text-slate-500 space-y-0.5 pt-1 border-t border-slate-800">
+                    <p>Last run: {fmtTime(scheduleStatus.last_run_at)}
+                      {scheduleStatus.last_run_success ? ' ✓' : ''}</p>
+                    {scheduleStatus.last_result_summary && (
+                      <p className="text-emerald-400">Result: {scheduleStatus.last_result_summary}</p>
+                    )}
+                    <p>Next run: {fmtTime(scheduleStatus.next_run_at)}</p>
+                  </div>
+                )}
               </div>
             )}
           </section>

@@ -28,6 +28,7 @@ from backend.passive_sniffer import PassiveSnifferEngine
 from backend.scan_store import ScanStore
 from backend.engines import get_fast_sweep_catalogue
 from backend.tag_rules import suggest_tags_for_scan
+from backend.scheduler import ScanScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,10 @@ class BackendAPI:
         self.sniffer = PassiveSnifferEngine()
         self.sniffer.start_listeners()
         self._active_task: Optional[asyncio.Task] = None
+        # Background scan scheduler (wired after start_scan is bound)
+        self.scheduler = ScanScheduler(self._scheduled_scan)
+        if self.scheduler.get_config().get("enabled"):
+            self.scheduler.start()
 
     def check_dependencies(self) -> Dict[str, Any]:
         """
@@ -342,6 +347,46 @@ class BackendAPI:
             return suggest_tags_for_scan(scan_payload)
         except Exception as e:
             return {"success": False, "error": str(e), "suggestions": [], "count": 0}
+
+    def _scheduled_scan(self, target: str, scan_profile: str) -> Dict[str, Any]:
+        """Run a scan from the background scheduler (blocking, called from scheduler thread)."""
+        try:
+            result = self.start_scan(target=target, scan_type=scan_profile)
+            # Persist via scan store if not already persisted by start_scan
+            if result.get("success") and not result.get("history_id"):
+                saved = self.scan_store.save_scan(result)
+                if saved.get("success"):
+                    result["history_id"] = saved.get("id")
+            return result
+        except Exception as e:
+            logger.exception("Scheduled scan failed:")
+            return {"success": False, "error": str(e)}
+
+    def get_schedule_status(self) -> Dict[str, Any]:
+        """Return scan scheduler configuration and run status."""
+        try:
+            return {"success": True, **self.scheduler.get_status()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def set_schedule_config(
+        self,
+        enabled: Optional[bool] = None,
+        interval_minutes: Optional[int] = None,
+        target: Optional[str] = None,
+        scan_profile: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update scheduler configuration (enabled toggle, interval, target)."""
+        try:
+            config = self.scheduler.set_config(
+                enabled=enabled,
+                interval_minutes=interval_minutes,
+                target=target,
+                scan_profile=scan_profile,
+            )
+            return {"success": True, **self.scheduler.get_status()}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def open_external_url(self, url: str) -> Dict[str, Any]:
         """
