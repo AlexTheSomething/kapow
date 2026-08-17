@@ -387,18 +387,12 @@ export default function App() {
               )}
 
               {activeTab === 'grid' && (
-                <DataGrid
-                  rowData={scanData?.ag_grid || []}
-                  onSelectHost={(row) => {
-                    const d = row?.data || row || {};
-                    const ip = d.ip || d.host_ip || '';
-                    const found = hostsList.find((h) => h.ip === ip || h.ipv4 === ip);
-                    if (found) {
-                      setSelectedHost({ host: found, initialPort: d.port || null });
-                    } else if (ip) {
-                      setSelectedHost({ host: { ip, hostname: d.hostname || '', ports: [] }, initialPort: d.port || null });
-                    }
+                <HostCards
+                  hosts={hostsList}
+                  onSelectHost={({ host, initialPort }) => {
+                    setSelectedHost({ host: host || {}, initialPort: initialPort || null });
                   }}
+                  onLaunchProtocol={handleLaunchProtocol}
                 />
               )}
 

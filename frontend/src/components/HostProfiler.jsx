@@ -75,8 +75,8 @@ export default function HostProfiler({ host, initialPort, scanData, onBack, onSa
   };
 
   const rtt = telemetry?.current_latency;
-  const pingDot = rtt !== null ? (rtt < 2 ? '🟢' : rtt < 10 ? '🟡' : '🔴') : '⚫';
-  const pingColor = rtt !== null ? (rtt < 2 ? 'text-emerald-400' : rtt < 10 ? 'text-amber-400' : 'text-rose-400') : 'text-slate-500';
+  const pingDot = rtt != null ? (rtt < 2 ? '🟢' : rtt < 10 ? '🟡' : '🔴') : '⚫';
+  const pingColor = rtt != null ? (rtt < 2 ? 'text-emerald-400' : rtt < 10 ? 'text-amber-400' : 'text-rose-400') : 'text-slate-500';
 
   return (
     <div className="flex flex-col h-full w-full bg-dark-950 overflow-hidden select-none animate-drill-zoom">
@@ -93,7 +93,7 @@ export default function HostProfiler({ host, initialPort, scanData, onBack, onSa
             <div className="flex items-center gap-2">
               <span className="font-mono text-base font-bold text-cyan-300">{ip}</span>
               {hostname && <span className="text-sm text-slate-400 font-mono">({hostname})</span>}
-              <span className={`text-xs font-semibold ${pingColor}`}>{pingDot} {rtt !== null ? `${rtt.toFixed(1)} ms` : '—'}</span>
+              <span className={`text-xs font-semibold ${pingColor}`}>{pingDot} {rtt != null ? `${rtt.toFixed(1)} ms` : '—'}</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
               {os && <span className="flex items-center gap-1"><Server className="w-3 h-3" />{os}</span>}
@@ -258,7 +258,7 @@ export default function HostProfiler({ host, initialPort, scanData, onBack, onSa
             </h3>
             <div className="grid grid-cols-4 gap-3">
               <div className="p-3 rounded-xl bg-dark-950 text-center">
-                <div className={`text-xl font-bold font-mono ${pingColor}`}>{rtt !== null ? rtt.toFixed(1) : '—'}</div>
+                <div className={`text-xl font-bold font-mono ${pingColor}`}>{rtt != null ? rtt.toFixed(1) : '—'}</div>
                 <div className="text-[10px] text-slate-500">ms RTT</div>
               </div>
               <div className="p-3 rounded-xl bg-dark-950 text-center">
