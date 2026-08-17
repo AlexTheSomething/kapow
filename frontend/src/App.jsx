@@ -8,6 +8,7 @@ import ConsoleDrawer from './components/ConsoleDrawer';
 import SuggestionPanel from './components/SuggestionPanel';
 import StatusBar from './components/StatusBar';
 import Settings from './components/Settings';
+import AlertsBell from './components/AlertsBell';
 import { Network, Table, GitCompare, Terminal, Sparkles, Settings as SettingsIcon, X } from 'lucide-react';
 
 export default function App() {
@@ -331,6 +332,8 @@ export default function App() {
           ))}
         </div>
         <div className="flex items-center gap-2">
+          {/* Change alerts bell */}
+          <AlertsBell />
           {/* Settings */}
           <button
             onClick={() => setShowSettings(!showSettings)}

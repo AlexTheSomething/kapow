@@ -29,6 +29,7 @@ from backend.scan_store import ScanStore
 from backend.engines import get_fast_sweep_catalogue
 from backend.tag_rules import suggest_tags_for_scan
 from backend.scheduler import ScanScheduler
+from backend.alerts import AlertStore, check_for_changes
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,8 @@ class BackendAPI:
         self.scheduler = ScanScheduler(self._scheduled_scan)
         if self.scheduler.get_config().get("enabled"):
             self.scheduler.start()
+        # Change-detection alert store
+        self.alerts = AlertStore()
 
     def check_dependencies(self) -> Dict[str, Any]:
         """
@@ -98,6 +101,15 @@ class BackendAPI:
                     saved = self.scan_store.save_scan(result)
                     if saved.get("success"):
                         result["history_id"] = saved.get("id")
+                    # Change detection: compare with previous scan
+                    try:
+                        recent = self.scan_store.list_scans(limit=2)
+                        if len(recent) >= 2:
+                            prev = self.scan_store.get_scan(recent[1]["id"])
+                            change_res = check_for_changes(result, prev, self.alerts)
+                            result["changes"] = change_res
+                    except Exception:
+                        logger.exception("Change detection failed after scan")
                 return result
             finally:
                 loop.close()
@@ -347,6 +359,29 @@ class BackendAPI:
             return suggest_tags_for_scan(scan_payload)
         except Exception as e:
             return {"success": False, "error": str(e), "suggestions": [], "count": 0}
+
+    def get_alerts(self, unread_only: bool = False, limit: int = 50) -> Dict[str, Any]:
+        """Return recent change-detection alerts."""
+        try:
+            alerts = self.alerts.list_alerts(unread_only=unread_only, limit=limit)
+            return {"success": True, "alerts": alerts, "unread": self.alerts.unread_count()}
+        except Exception as e:
+            return {"success": False, "error": str(e), "alerts": []}
+
+    def get_unread_alert_count(self) -> Dict[str, Any]:
+        """Return the number of unread alerts (for the notification bell)."""
+        try:
+            return {"success": True, "unread": self.alerts.unread_count()}
+        except Exception as e:
+            return {"success": False, "error": str(e), "unread": 0}
+
+    def mark_alerts_read(self) -> Dict[str, Any]:
+        """Mark all alerts as read."""
+        try:
+            n = self.alerts.mark_all_read()
+            return {"success": True, "marked": n}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def _scheduled_scan(self, target: str, scan_profile: str) -> Dict[str, Any]:
         """Run a scan from the background scheduler (blocking, called from scheduler thread)."""
