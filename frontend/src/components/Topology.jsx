@@ -465,6 +465,14 @@ export default function Topology({ elements, onSelectHost }) {
               Inspect & Tag Host Profile
             </button>
           )}
+          {selectedNode.type === 'service' && selectedNode.host_ip && (
+            <button
+              onClick={() => onSelectHost(selectedNode)}
+              className="w-full mt-2 py-2 rounded-xl text-xs font-bold bg-brand-cyan/20 hover:bg-brand-cyan/30 text-brand-cyan border border-brand-cyan/30 transition-all"
+            >
+              Inspect Host ({selectedNode.host_ip})
+            </button>
+          )}
         </div>
       )}
     </div>

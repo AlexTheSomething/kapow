@@ -252,9 +252,12 @@ export default function App() {
 
   // ── Suggestion handlers ──
   const handleAcceptSuggestion = async (s) => {
-    // Fetch current host tags, add the accepted one, save
-    setSuggestions((prev) => prev.filter((x) => x !== s));
-    await handleSaveAsset({ ip: s.ip, tags: [s.tag], risk_level: 'LOW' });
+    // Fetch existing tags for this host and merge
+    const existingHost = hostsList.find((h) => (h.ip || h.ipv4) === s.ip);
+    const existingTags = existingHost?.tags || [];
+    const newTags = [...new Set([...existingTags, s.tag])];
+    setSuggestions((prev) => prev.filter((x) => !(x.ip === s.ip && x.tag === s.tag)));
+    await handleSaveAsset({ ip: s.ip, mac: existingHost?.mac || '', tags: newTags, risk_level: 'LOW' });
   };
 
   const handleDismissAllSuggestions = () => setSuggestions([]);
@@ -270,10 +273,12 @@ export default function App() {
 
   // If a host is selected for drill-down, show the profiler instead of tabs
   if (selectedHost) {
+    const hostObj = selectedHost?.host || selectedHost;
     return (
       <div className="flex flex-col h-screen w-screen bg-dark-950 text-slate-100 overflow-hidden select-none">
         <HostProfiler
-          host={selectedHost}
+          host={hostObj}
+          initialPort={selectedHost?.initialPort || null}
           scanData={scanData}
           onBack={() => setSelectedHost(null)}
           onSaveAsset={handleSaveAsset}
@@ -365,10 +370,17 @@ export default function App() {
                   suggestionCount={suggestions.filter((s) => s.color !== 'slate').length}
                   onOpenSuggestions={() => setShowSuggestions(true)}
                   onSelectHost={(hostData) => {
-                    // Map topology click to full host data
-                    const ip = hostData?.data?.ip || hostData?.ip || '';
+                    // Map topology click to full host data.
+                    // hostData may be a cytoscape node {data: {...}} or node.data() plain.
+                    const d = hostData?.data || hostData || {};
+                    const ip = d.ip || d.host_ip || '';
                     const found = hostsList.find((h) => h.ip === ip || h.ipv4 === ip);
-                    setSelectedHost(found || hostData);
+                    if (found) {
+                      setSelectedHost({ host: found, initialPort: d.port || null });
+                    } else if (ip) {
+                      // Fallback: open profiler with minimal info (host not in current scan)
+                      setSelectedHost({ host: { ip, hostname: d.hostname || d.label || '', ports: [] }, initialPort: null });
+                    }
                   }}
                   onScanLan={(cidr) => handleStartScan(cidr)}
                 />
@@ -378,9 +390,14 @@ export default function App() {
                 <DataGrid
                   rowData={scanData?.ag_grid || []}
                   onSelectHost={(row) => {
-                    const ip = row?.data?.ip || row?.ip || '';
+                    const d = row?.data || row || {};
+                    const ip = d.ip || d.host_ip || '';
                     const found = hostsList.find((h) => h.ip === ip || h.ipv4 === ip);
-                    if (found) setSelectedHost(found);
+                    if (found) {
+                      setSelectedHost({ host: found, initialPort: d.port || null });
+                    } else if (ip) {
+                      setSelectedHost({ host: { ip, hostname: d.hostname || '', ports: [] }, initialPort: d.port || null });
+                    }
                   }}
                 />
               )}

@@ -590,6 +590,14 @@ def to_ag_grid(parsed_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         distance = host.get('distance')
 
         ports = host.get('ports', [])
+        # Propagate asset metadata (tags/alias/etc.) to every row
+        asset_fields = {
+            "alias": host.get('alias', ''),
+            "owner": host.get('owner', ''),
+            "tags": host.get('tags', []) or [],
+            "notes": host.get('notes', ''),
+            "risk_level": host.get('risk_level', 'LOW'),
+        }
         if not ports:
             # Add host-level entry if no ports were parsed
             rows.append({
@@ -612,6 +620,7 @@ def to_ag_grid(parsed_data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "distance": distance,
                 "scripts_summary": "",
                 "scripts": [],
+                **asset_fields,
             })
             continue
 
@@ -645,6 +654,7 @@ def to_ag_grid(parsed_data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "distance": distance,
                 "scripts_summary": scripts_summary,
                 "scripts": scripts,
+                **asset_fields,
             })
 
     return rows
