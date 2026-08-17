@@ -15,6 +15,7 @@ export default function HostProfiler({ host, initialPort, scanData, onBack, onSa
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [expandedPort, setExpandedPort] = useState(initialPort || null);
+  const [timeline, setTimeline] = useState(null);
 
   const ip = host?.ip || host?.ipv4 || host?.data?.ip || '';
   const hostname = host?.primary_hostname || host?.hostname || host?.data?.label || '';
@@ -31,6 +32,21 @@ export default function HostProfiler({ host, initialPort, scanData, onBack, onSa
     setAlias(host?.alias || '');
     setNotes(host?.notes || '');
   }, [host]);
+
+  // Load host timeline
+  useEffect(() => {
+    if (!ip) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (window.pywebview?.api?.get_host_timeline) {
+          const res = await window.pywebview.api.get_host_timeline(ip);
+          if (!cancelled && res?.success) setTimeline(res);
+        }
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+  }, [ip]);
 
   // Load telemetry
   useEffect(() => {
@@ -297,6 +313,39 @@ export default function HostProfiler({ host, initialPort, scanData, onBack, onSa
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Host Timeline */}
+        {timeline && timeline.scan_count > 0 && (
+          <div className="bg-dark-900 border border-slate-800 rounded-2xl p-4 animate-slide-up" style={{ animationDelay: '140ms' }}>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5" /> Host Timeline ({timeline.scan_count} scans)
+            </h3>
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {timeline.events.map((ev, idx) => {
+                const time = ev.ts ? new Date(ev.ts * 1000).toLocaleString() : '';
+                let dotCls = 'bg-slate-500';
+                let textCls = 'text-slate-300';
+                if (ev.type === 'first_seen') { dotCls = 'bg-emerald-400'; textCls = 'text-emerald-300'; }
+                else if (ev.type === 'ports_opened') { dotCls = 'bg-amber-400'; textCls = 'text-amber-300'; }
+                else if (ev.type === 'ports_closed') { dotCls = 'bg-slate-500'; textCls = 'text-slate-400'; }
+                else if (ev.type === 'offline') { dotCls = 'bg-rose-400'; textCls = 'text-rose-300'; }
+                else if (ev.type === 'service_changed') { dotCls = 'bg-cyan-400'; textCls = 'text-cyan-300'; }
+                return (
+                  <div key={idx} className="flex items-start gap-2.5 animate-fade-in">
+                    <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${dotCls}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[11px] font-medium leading-snug ${textCls}`}>{ev.detail}</p>
+                      <p className="text-[9px] text-slate-600 mt-0.5">{time}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {timeline.events.length === 0 && (
+                <p className="text-xs text-slate-500 italic">No changes recorded yet — scan this host again over time to build history.</p>
+              )}
             </div>
           </div>
         )}

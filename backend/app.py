@@ -30,6 +30,7 @@ from backend.engines import get_fast_sweep_catalogue
 from backend.tag_rules import suggest_tags_for_scan
 from backend.scheduler import ScanScheduler
 from backend.alerts import AlertStore, check_for_changes
+from backend.host_timeline import build_host_timeline
 
 logger = logging.getLogger(__name__)
 
@@ -380,6 +381,13 @@ class BackendAPI:
         try:
             n = self.alerts.mark_all_read()
             return {"success": True, "marked": n}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_host_timeline(self, ip: str) -> Dict[str, Any]:
+        """Reconstruct a host's history across all persisted scans."""
+        try:
+            return build_host_timeline(self.scan_store, ip)
         except Exception as e:
             return {"success": False, "error": str(e)}
 
