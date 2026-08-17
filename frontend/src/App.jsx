@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header';
 import Home from './components/Home';
-import DataGrid from './components/DataGrid';
+import HostCards from './components/HostCards';
 import ScanDiff from './components/ScanDiff';
 import HostProfiler from './components/HostProfiler';
 import ConsoleDrawer from './components/ConsoleDrawer';
