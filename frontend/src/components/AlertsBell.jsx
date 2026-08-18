@@ -90,7 +90,7 @@ export default function AlertsBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-dark-900 border border-slate-700 rounded-2xl shadow-2xl z-50 animate-slide-up overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-96 glass-edge rounded-2xl shadow-2xl z-50 animate-slide-up overflow-hidden">
           <div className="p-3.5 border-b border-slate-800 flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-white">Network Changes</span>
             {unread === 0 && alerts.length > 0 && (

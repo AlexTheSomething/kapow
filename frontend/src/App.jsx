@@ -297,7 +297,8 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-dark-950 text-slate-100 overflow-hidden select-none">
+    <div className="flex flex-col h-screen w-screen bg-dark-950 text-slate-100 overflow-hidden select-none relative">
+      <div className="app-accent w-full shrink-0" />
       {/* ── Header ── */}
       <Header
         dependencies={dependencies}
@@ -356,7 +357,7 @@ export default function App() {
         {/* Tab content + suggestion panel */}
         <div className="flex-1 flex min-h-0 overflow-hidden">
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div key={activeTab} className="flex-1 min-h-0 overflow-hidden animate-fade-in">
               {activeTab === 'home' && (
                 <Home
                   target={target}
