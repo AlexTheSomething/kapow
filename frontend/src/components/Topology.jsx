@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import cytoscape from 'cytoscape';
 
-// Step 2 of premium layering: device glyphs on nodes (SVG data-URI backgrounds).
-// Gradient + ambient substrate from step 1 retained. Glyph is applied via a
-// data-mapper on nodes that have a non-empty glyph_url; others stay glyph-less.
+// Step 2 (final): device type shown as a clean letter badge prefixed into the
+// node label (e.g. "[R] gateway"). cytoscape background-image data-URIs clip/
+// garble in this environment, so we use text — 100% reliable, no clipping.
 
 const GRAD = {
   subnet: ['#0e7490', '#0b1220'],
@@ -12,24 +12,26 @@ const GRAD = {
   service: ['#3730a3', '#1e1b4b'],
 };
 
-const glyph = (path, color = '#e2e8f0') => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
-  // base64 (no unescaped # / utf8 issues) — cytoscape renders these cleanly
-  return `data:image/svg+xml;base64,${btoa(svg)}`;
-};
-
-const GLYPHS = {
-  router: glyph('M3 13h2l2 4h6l2-4h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2z'),
-  host: glyph('M4 5h16v10H4z M2 19h20 M9 19v-4 M15 19v-4'),
-  service: glyph('M12 2v4 M12 18v4 M2 12h4 M18 12h4 M5 5l3 3 M16 16l3 3 M19 5l-3 3 M8 16l-3 3'),
-  subnet: glyph('M12 2 2 7l10 5 10-5z M2 17l10 5 10-5 M2 12l10 5 10-5'),
-};
-
-const glyphFor = (type) => GLYPHS[type] || '';
+const BADGE = { subnet: 'N', router: 'R', host: 'H', service: 'S' };
 
 export default function Topology({ elements, onSelectHost }) {
   const containerRef = useRef(null);
   const cyRef = useRef(null);
+
+  // Prefix the type badge letter into the visible label.
+  const decorated = (() => {
+    if (!elements || !elements.nodes) return elements;
+    return {
+      ...elements,
+      nodes: elements.nodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          label: `${BADGE[n.data.type] || '?'}\u2002${n.data.label || n.data.ip || ''}`,
+        },
+      })),
+    };
+  })();
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
@@ -40,37 +42,25 @@ export default function Topology({ elements, onSelectHost }) {
         {
           selector: 'node',
           style: {
-            label: 'data(label)',
-            color: '#e2e8f0',
-            'font-size': 10,
-            'font-family': 'Inter, sans-serif',
-            'text-valign': 'bottom',
-            'text-halign': 'center',
-            'text-margin-y': 4,
-            'text-wrap': 'wrap',
-            'text-max-width': '90px',
-            width: 76,
-            height: 54,
-            shape: 'round-rectangle',
             'background-color': (ele) => (GRAD[ele.data('type')] || ['#475569', '#334155'])[0],
             'background-fill': 'linear-gradient',
             'background-gradient-stop-colors': (ele) => (GRAD[ele.data('type')] || ['#475569', '#334155']).join(' '),
             'background-gradient-stop-positions': '0 100',
             'background-gradient-direction': 'to-bottom',
+            shape: 'round-rectangle',
+            width: 84,
+            height: 60,
             'border-width': 2,
             'border-color': '#0b0f19',
-          },
-        },
-        {
-          selector: 'node[glyph_url != ""]',
-          style: {
-            'background-image': 'data(glyph_url)',
-            'background-fit': 'contain',
-            'background-width': '60%',
-            'background-height': '60%',
-            'background-position-x': '50%',
-            'background-position-y': '28%',
-            'background-clip': 'none',
+            label: 'data(label)',
+            color: '#e2e8f0',
+            'font-size': 11,
+            'font-weight': 600,
+            'font-family': 'Inter, sans-serif',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-wrap': 'wrap',
+            'text-max-width': '96px',
           },
         },
         {
@@ -95,19 +85,7 @@ export default function Topology({ elements, onSelectHost }) {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [elements, onSelectHost]);
-
-  // Attach glyph_url to incoming elements (sample already has typed nodes).
-  const decorated = (() => {
-    if (!elements || !elements.nodes) return elements;
-    return {
-      ...elements,
-      nodes: elements.nodes.map((n) => ({
-        ...n,
-        data: { ...n.data, glyph_url: n.data.glyph_url || glyphFor(n.data.type) },
-      })),
-    };
-  })();
+  }, [decorated, onSelectHost]);
 
   return (
     <div className="relative w-full h-full bg-dark-950 overflow-hidden">
