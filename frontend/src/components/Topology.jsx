@@ -12,10 +12,11 @@ const GRAD = {
   service: ['#3730a3', '#1e1b4b'],
 };
 
-const glyph = (path, color = '#e2e8f0') =>
-  `data:image/svg+xml;utf8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`
-  )}`;
+const glyph = (path, color = '#e2e8f0') => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
+  // base64 (no unescaped # / utf8 issues) — cytoscape renders these cleanly
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+};
 
 const GLYPHS = {
   router: glyph('M3 13h2l2 4h6l2-4h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2z'),
@@ -43,8 +44,9 @@ export default function Topology({ elements, onSelectHost }) {
             color: '#e2e8f0',
             'font-size': 10,
             'font-family': 'Inter, sans-serif',
-            'text-valign': 'center',
+            'text-valign': 'bottom',
             'text-halign': 'center',
+            'text-margin-y': 4,
             'text-wrap': 'wrap',
             'text-max-width': '90px',
             width: 76,
@@ -63,11 +65,12 @@ export default function Topology({ elements, onSelectHost }) {
           selector: 'node[glyph_url != ""]',
           style: {
             'background-image': 'data(glyph_url)',
-            'background-fit': 'none',
-            'background-width': '24px',
-            'background-height': '24px',
+            'background-fit': 'contain',
+            'background-width': '60%',
+            'background-height': '60%',
             'background-position-x': '50%',
-            'background-position-y': '22%',
+            'background-position-y': '28%',
+            'background-clip': 'none',
           },
         },
         {
