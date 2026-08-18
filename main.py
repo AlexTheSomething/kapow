@@ -59,7 +59,9 @@ def main():
     is_dev = not args.prod
     logger.info("Starting Kapow (mode: %s)...", "DEV (Vite)" if is_dev else "PROD (dist)")
     create_app_window(dev=is_dev, port=args.port)
-    webview.start(debug=is_dev)
+    # private_mode=True disables CEF disk caching — prevents the stale-UI bug
+    # where a relaunch served an old cached copy of the built frontend.
+    webview.start(debug=is_dev, private_mode=True)
 
 
 if __name__ == "__main__":

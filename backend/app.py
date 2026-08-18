@@ -493,15 +493,6 @@ def create_app_window(dev: bool = True, port: int = 5173) -> webview.Window:
         else:
             url = dist_path
 
-    # Use a fresh, unique storage path per launch so CEF never serves a
-    # stale cached copy of the built frontend (prevents "UI didn't change"
-    # after edits). Falls back gracefully if the temp dir can't be made.
-    try:
-        import tempfile
-        storage_path = tempfile.mkdtemp(prefix="kapow_cef_")
-    except Exception:
-        storage_path = None
-
     window = webview.create_window(
         title="Kapow - Network Security Auditor & Topology Engine",
         url=url,
@@ -511,7 +502,6 @@ def create_app_window(dev: bool = True, port: int = 5173) -> webview.Window:
         min_size=(960, 640),
         background_color="#0b0f19",
         easy_drag=True,
-        storage_path=storage_path,
     )
 
     return window
