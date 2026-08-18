@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Square, Zap, Eye, EyeOff, Sparkles, Radio, Wifi, Layers, ChevronDown, Save, Plus, X } from 'lucide-react';
 import Topology from './Topology';
+import ErrorBoundary from './ErrorBoundary';
 import TagChip from './TagChip';
 
 const QUICK_PROFILES = [
@@ -134,7 +135,9 @@ export default function Home({
       {/* Canvas */}
       <div className="flex-1 relative min-h-0">
         {hostsCount > 0 || elements.nodes?.length > 0 ? (
-          <Topology elements={elements} onSelectHost={(hostData) => onSelectHost && onSelectHost(hostData)} />
+          <ErrorBoundary>
+            <Topology elements={elements} onSelectHost={(hostData) => onSelectHost && onSelectHost(hostData)} />
+          </ErrorBoundary>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10 pointer-events-none">
             <div className="relative mb-6"><div className="w-20 h-20 rounded-full bg-cyan-500/5 border border-cyan-500/20 flex items-center justify-center"><Radio className="w-9 h-9 text-cyan-500/40" /></div><div className="absolute inset-0 rounded-full border border-cyan-500/10 animate-scan-wave" /></div>
