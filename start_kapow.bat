@@ -39,28 +39,26 @@ if !errorlevel! neq 0 (
     echo [OK] Dependencies installed.
 )
 
-:: ---- Check frontend build ----
-if not exist "frontend\dist\index.html" (
-    echo [SETUP] Frontend not yet built. Building now...
-    where npm.cmd >nul 2>&1
-    if !errorlevel! neq 0 (
-        echo [FAIL] Node.js/npm needed for first-run build.
-        echo        Install Node.js: https://nodejs.org/
-        echo    OR  run: cd frontend ^&^& npm install ^&^& npm run build
-        pause
-        exit /b 1
-    )
-    cd frontend
-    call npm.cmd install --silent 2>nul
-    call npm.cmd run build
-    cd ..
-    if not exist "frontend\dist\index.html" (
-        echo [FAIL] Frontend build failed.
-        pause
-        exit /b 1
-    )
-    echo [OK] Frontend build complete.
+:: ---- Build frontend (always rebuild so dist is never stale) ----
+echo [BUILD] Rebuilding frontend...
+where npm.cmd >nul 2>&1
+if !errorlevel! neq 0 (
+    echo [FAIL] Node.js/npm needed to build the frontend.
+    echo        Install Node.js: https://nodejs.org/
+    echo    OR  run: cd frontend ^&^& npm install ^&^& npm run build
+    pause
+    exit /b 1
 )
+cd frontend
+call npm.cmd install --silent 2>nul
+call npm.cmd run build
+cd ..
+if not exist "frontend\dist\index.html" (
+    echo [FAIL] Frontend build failed.
+    pause
+    exit /b 1
+)
+echo [OK] Frontend build complete.
 
 :: ---- Launch ----
 echo.
