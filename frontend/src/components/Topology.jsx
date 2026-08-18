@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import cytoscape from 'cytoscape';
 
-// Step 1 of premium layering: gradient-filled nodes by type + ambient glass
-// substrate. No glyphs / rAF flow animation yet (those come after this
-// renders reliably). Robust: plain solid fallbacks if gradient props ignored.
+// Step 2 of premium layering: device glyphs on nodes (SVG data-URI backgrounds).
+// Gradient + ambient substrate from step 1 retained. Glyph is applied via a
+// data-mapper on nodes that have a non-empty glyph_url; others stay glyph-less.
 
 const GRAD = {
   subnet: ['#0e7490', '#0b1220'],
@@ -11,6 +11,20 @@ const GRAD = {
   host: ['#1e293b', '#0f1b2e'],
   service: ['#3730a3', '#1e1b4b'],
 };
+
+const glyph = (path, color = '#e2e8f0') =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`
+  )}`;
+
+const GLYPHS = {
+  router: glyph('M3 13h2l2 4h6l2-4h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2z'),
+  host: glyph('M4 5h16v10H4z M2 19h20 M9 19v-4 M15 19v-4'),
+  service: glyph('M12 2v4 M12 18v4 M2 12h4 M18 12h4 M5 5l3 3 M16 16l3 3 M19 5l-3 3 M8 16l-3 3'),
+  subnet: glyph('M12 2 2 7l10 5 10-5z M2 17l10 5 10-5 M2 12l10 5 10-5'),
+};
+
+const glyphFor = (type) => GLYPHS[type] || '';
 
 export default function Topology({ elements, onSelectHost }) {
   const containerRef = useRef(null);
@@ -20,7 +34,7 @@ export default function Topology({ elements, onSelectHost }) {
     if (!containerRef.current) return undefined;
     const cy = cytoscape({
       container: containerRef.current,
-      elements: elements || { nodes: [], edges: [] },
+      elements: decorated || { nodes: [], edges: [] },
       style: [
         {
           selector: 'node',
@@ -43,6 +57,17 @@ export default function Topology({ elements, onSelectHost }) {
             'background-gradient-direction': 'to-bottom',
             'border-width': 2,
             'border-color': '#0b0f19',
+          },
+        },
+        {
+          selector: 'node[glyph_url != ""]',
+          style: {
+            'background-image': 'data(glyph_url)',
+            'background-fit': 'none',
+            'background-width': '24px',
+            'background-height': '24px',
+            'background-position-x': '50%',
+            'background-position-y': '22%',
           },
         },
         {
@@ -69,9 +94,20 @@ export default function Topology({ elements, onSelectHost }) {
     };
   }, [elements, onSelectHost]);
 
+  // Attach glyph_url to incoming elements (sample already has typed nodes).
+  const decorated = (() => {
+    if (!elements || !elements.nodes) return elements;
+    return {
+      ...elements,
+      nodes: elements.nodes.map((n) => ({
+        ...n,
+        data: { ...n.data, glyph_url: n.data.glyph_url || glyphFor(n.data.type) },
+      })),
+    };
+  })();
+
   return (
     <div className="relative w-full h-full bg-dark-950 overflow-hidden">
-      {/* Ambient glass substrate */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
