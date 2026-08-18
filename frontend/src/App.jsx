@@ -198,8 +198,54 @@ export default function App() {
       setScanData(sample);
       if (sample.logs) setLiveLogs(sample.logs);
       setStatusMessage('Sample network loaded.');
+    } else {
+      // Fallback: render a built-in sample so the topology is always viewable
+      // (e.g. when running the dev frontend without the pywebview backend).
+      const sample = buildFallbackSample();
+      setScanData(sample);
+      setStatusMessage('Sample network loaded (offline preview).');
     }
   };
+
+  // Minimal offline sample topology used when no pywebview backend is present.
+  const buildFallbackSample = () => ({
+    success: true,
+    target: '192.168.1.0/24',
+    scan_profile: 'comprehensive',
+    hostsCount: 6,
+    timestamp: new Date().toLocaleString(),
+    logs: ['[offline] Demo data generated client-side'],
+    data: {
+      hosts: [
+        { ip: '192.168.1.1', mac: '00:0C:29:AA:BB:01', vendor: 'VMware, Inc.', primary_hostname: 'gateway.local', hostname: 'gateway.local', os: 'Router firmware', risk_level: 'LOW', ports: [{ portid: '53', state: 'open', service: { name: 'domain' } }, { portid: '80', state: 'open', service: { name: 'http' } }], tags: [] },
+        { ip: '192.168.1.20', mac: 'B8:27:EB:AA:BB:02', vendor: 'Raspberry Pi Foundation', primary_hostname: 'pi-homelab.local', hostname: 'pi-homelab.local', os: 'Linux', risk_level: 'LOW', ports: [{ portid: '22', state: 'open', service: { name: 'ssh' } }], tags: [] },
+        { ip: '192.168.1.35', mac: '00:1B:FC:AA:BB:03', vendor: 'ASUS', primary_hostname: '', hostname: 'router.asus.lan', os: 'ASUS Router', risk_level: 'MEDIUM', ports: [{ portid: '443', state: 'open', service: { name: 'https' } }], tags: [] },
+        { ip: '192.168.1.50', mac: 'DC:A6:32:AA:BB:04', vendor: 'Raspberry Pi', primary_hostname: 'sensor.local', hostname: 'sensor.local', os: 'Linux', risk_level: 'LOW', ports: [{ portid: '8080', state: 'open', service: { name: 'http-alt' } }], tags: [] },
+        { ip: '192.168.1.77', mac: '00:11:32:AA:BB:05', vendor: 'Synology', primary_hostname: 'nas.local', hostname: 'nas.local', os: 'Linux', risk_level: 'HIGH', max_cvss: 8.1, ports: [{ portid: '445', state: 'open', service: { name: 'microsoft-ds' } }], tags: [] },
+        { ip: '192.168.1.90', mac: '08:00:27:AA:BB:06', vendor: 'Oracle VirtualBox', primary_hostname: 'vm-win.local', hostname: 'vm-win.local', os: 'Windows', risk_level: 'CRITICAL', max_cvss: 9.8, ports: [{ portid: '3389', state: 'open', service: { name: 'ms-wbt-server' } }, { portid: '139', state: 'open', service: { name: 'netbios-ssn' } }], tags: [] },
+      ],
+      subnets: [{ cidr: '192.168.1.0/24', gateway: '192.168.1.1' }],
+    },
+    cytoscape: { nodes: [], edges: [] },
+    ag_grid: [],
+  });
+
+  // Build a cytoscape topology (subnet + hosts + router) so the canvas renders
+  // even in the offline fallback. Mirrors backend scanner.get_sample_data shape.
+  const hosts = sample.data.hosts;
+  const gw = hosts.find((h) => h.risk_level === 'LOW' && h.ports.some((p) => p.portid === '53')) || hosts[0];
+  const nodes = [
+    { data: { id: 'subnet-0', type: 'subnet', label: '192.168.1.0/24', ip: '192.168.1.0/24' } },
+    ...hosts.map((h) => ({
+      data: {
+        id: `host-${h.ip}`, type: 'host', ip: h.ip, label: h.primary_hostname || h.hostname || h.ip,
+        primary_hostname: h.primary_hostname, hostname: h.hostname, mac: h.mac, vendor: h.vendor,
+        os: h.os, risk_level: h.risk_level, max_cvss: h.max_cvss, alias: '',
+      },
+    })),
+  ];
+  const edges = hosts.map((h) => ({ data: { id: `e-${h.ip}`, source: 'subnet-0', target: `host-${h.ip}` } }));
+  sample.cytoscape = { nodes, edges };
 
   // ── Asset / Protocol / Telemetry ──
   const handleSaveAsset = async (assetData) => {
