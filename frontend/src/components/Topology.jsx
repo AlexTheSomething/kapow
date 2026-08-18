@@ -18,18 +18,19 @@ export default function Topology({ elements, onSelectHost }) {
   const containerRef = useRef(null);
   const cyRef = useRef(null);
 
-  // Prefix the type badge letter into the visible label.
+  // Prefix the type badge letter into the visible label (truncated to fit).
   const decorated = (() => {
     if (!elements || !elements.nodes) return elements;
     return {
       ...elements,
-      nodes: elements.nodes.map((n) => ({
-        ...n,
-        data: {
-          ...n.data,
-          label: `${BADGE[n.data.type] || '?'}\u2002${n.data.label || n.data.ip || ''}`,
-        },
-      })),
+      nodes: elements.nodes.map((n) => {
+        const raw = n.data.label || n.data.ip || '';
+        const name = raw.length > 16 ? `${raw.slice(0, 15)}…` : raw;
+        return {
+          ...n,
+          data: { ...n.data, label: `${BADGE[n.data.type] || '?'}\u2002${name}` },
+        };
+      }),
     };
   })();
 
@@ -48,19 +49,21 @@ export default function Topology({ elements, onSelectHost }) {
             'background-gradient-stop-positions': '0 100',
             'background-gradient-direction': 'to-bottom',
             shape: 'round-rectangle',
-            width: 84,
-            height: 60,
+            width: 104,
+            height: 64,
             'border-width': 2,
             'border-color': '#0b0f19',
             label: 'data(label)',
             color: '#e2e8f0',
-            'font-size': 11,
+            'font-size': 9.5,
             'font-weight': 600,
             'font-family': 'Inter, sans-serif',
             'text-valign': 'center',
             'text-halign': 'center',
             'text-wrap': 'wrap',
-            'text-max-width': '96px',
+            'text-max-width': '92px',
+            'text-outline-width': 2,
+            'text-outline-color': '#04060d',
           },
         },
         {
