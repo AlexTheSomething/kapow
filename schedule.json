@@ -1,9 +1,0 @@
-{
-  "enabled": false,
-  "interval_minutes": 1,
-  "target": "192.168.1.0/24",
-  "scan_profile": "quick",
-  "last_run_at": 1787011263.1499205,
-  "last_run_success": true,
-  "last_result_summary": "7 host(s) discovered"
-}

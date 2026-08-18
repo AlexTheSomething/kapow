@@ -27,6 +27,9 @@ wheels/
 # SQLite DB
 assets.db
 
+# Runtime config (scheduler state)
+schedule.json
+
 # Node / Frontend
 node_modules/
 npm-debug.log*
