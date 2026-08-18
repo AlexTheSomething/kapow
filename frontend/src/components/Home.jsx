@@ -143,7 +143,7 @@ export default function Home({
           </div>
         )}
         {passiveDevices.length > 0 && (
-          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-dark-950/90 border border-slate-700 text-[10px] text-slate-400 z-10"><Wifi className="w-3 h-3 text-emerald-400" /><span>{passiveDevices.length} passively discovered</span></div>
+          <div className="absolute bottom-3 left-3 z-30 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-dark-950/90 border border-slate-700 text-[10px] text-slate-400"><Wifi className="w-3 h-3 text-emerald-400" /><span>{passiveDevices.length} passively discovered</span></div>
         )}
       </div>
       {/* Summary bar */}

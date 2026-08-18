@@ -355,27 +355,27 @@ export default function Topology({ elements, onSelectHost }) {
       <div ref={containerRef} className="absolute inset-0 cursor-grab active:cursor-grabbing" style={{ background: 'transparent' }} />
 
       {/* Floating Canvas Controls */}
-      <div className="absolute top-4 left-4 z-20 flex items-center gap-2 p-1.5 rounded-2xl glass-edge shadow-2xl">
-        <div className="flex items-center gap-1">
-          <button onClick={handleZoomIn} className="p-2 rounded-xl bg-dark-900/70 hover:bg-slate-800 text-slate-300 hover:text-white transition-all" title="Zoom In"><ZoomIn className="w-4 h-4" /></button>
-          <button onClick={handleZoomOut} className="p-2 rounded-xl bg-dark-900/70 hover:bg-slate-800 text-slate-300 hover:text-white transition-all" title="Zoom Out"><ZoomOut className="w-4 h-4" /></button>
-          <button onClick={handleFit} className="p-2 rounded-xl bg-dark-900/70 hover:bg-slate-800 text-slate-300 hover:text-white transition-all" title="Fit Network to Screen"><Maximize2 className="w-4 h-4" /></button>
+      <div className="absolute top-3 left-3 z-20 flex items-center gap-1 p-1 rounded-xl glass-edge shadow-xl">
+        <div className="flex items-center gap-0.5">
+          <button onClick={handleZoomIn} className="p-1.5 rounded-lg bg-dark-900/70 hover:bg-slate-800 text-slate-300 hover:text-white transition-all" title="Zoom In"><ZoomIn className="w-3.5 h-3.5" /></button>
+          <button onClick={handleZoomOut} className="p-1.5 rounded-lg bg-dark-900/70 hover:bg-slate-800 text-slate-300 hover:text-white transition-all" title="Zoom Out"><ZoomOut className="w-3.5 h-3.5" /></button>
+          <button onClick={handleFit} className="p-1.5 rounded-lg bg-dark-900/70 hover:bg-slate-800 text-slate-300 hover:text-white transition-all" title="Fit Network to Screen"><Maximize2 className="w-3.5 h-3.5" /></button>
         </div>
-        <div className="w-px h-5 bg-slate-700/70 mx-0.5" />
+        <div className="w-px h-4 bg-slate-700/70 mx-0.5" />
         <div className="flex items-center gap-1">
-          <Layers className="w-3.5 h-3.5 text-cyan-400 ml-1" />
+          <Layers className="w-3 h-3 text-cyan-400 ml-0.5" />
           <select
             value={currentLayout}
             onChange={(e) => handleSwitchLayout(e.target.value)}
-            className="bg-dark-900/90 border border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-cyan-300 font-semibold focus:outline-none focus:border-brand-cyan"
+            className="bg-dark-900/90 border border-slate-700/80 rounded-lg px-1.5 py-1 text-[11px] text-cyan-300 font-semibold focus:outline-none focus:border-brand-cyan"
           >
             {LAYOUT_OPTIONS.map((lo) => (<option key={lo.id} value={lo.id}>{lo.label}</option>))}
           </select>
         </div>
-        <div className="w-px h-5 bg-slate-700/70 mx-0.5" />
+        <div className="w-px h-4 bg-slate-700/70 mx-0.5" />
         <button
           onClick={() => setShowServices(!showServices)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${showServices ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40' : 'bg-dark-900/80 text-slate-400 hover:text-slate-200'}`}
+          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition-all ${showServices ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40' : 'bg-dark-900/80 text-slate-400 hover:text-slate-200'}`}
           title="Toggle port service leaves"
         >
           {showServices ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -383,13 +383,13 @@ export default function Topology({ elements, onSelectHost }) {
         </button>
       </div>
 
-      {/* Floating Legend Overlay */}
-      <div className="absolute bottom-4 left-4 z-20 p-3 rounded-2xl glass-edge text-[11px] text-slate-300 flex items-center gap-4 shadow-xl">
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-dark-900 border border-cyan-400 border-dashed" /><span>Subnet</span></div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-cyan-600 border border-cyan-400 rotate-45" /><span>Router</span></div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-slate-800 border border-emerald-400" /><span>Secure Host</span></div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-slate-800 border border-rose-500 shadow-glow-rose" /><span>Vulnerable Host</span></div>
-        <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-indigo-900 border border-indigo-400" /><span>Service</span></div>
+      {/* Floating Legend Overlay — compact, bottom-right so it never covers the passive indicator (bottom-left) */}
+      <div className="absolute bottom-3 right-3 z-20 px-2.5 py-1.5 rounded-xl glass-edge text-[10px] text-slate-400 flex items-center gap-2.5 shadow-lg">
+        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-dark-900 border border-cyan-400 border-dashed" /><span>Subnet</span></div>
+        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-cyan-600 border border-cyan-400 rotate-45" /><span>Router</span></div>
+        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-slate-800 border border-emerald-400" /><span>Host</span></div>
+        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-slate-800 border border-rose-500" /><span>Vuln</span></div>
+        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-indigo-900 border border-indigo-400" /><span>Svc</span></div>
       </div>
 
       {/* Selected Node Details Drawer */}

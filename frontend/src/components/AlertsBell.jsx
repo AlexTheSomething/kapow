@@ -90,9 +90,9 @@ export default function AlertsBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-96 glass-edge rounded-2xl shadow-2xl z-50 animate-slide-up overflow-hidden">
-          <div className="p-3.5 border-b border-slate-800 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-white">Network Changes</span>
+        <div className="absolute right-0 top-full mt-2 w-80 glass-edge rounded-xl shadow-2xl z-50 animate-slide-up overflow-hidden">
+          <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-white">Network Changes</span>
             {unread === 0 && alerts.length > 0 && (
               <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold">
                 <CheckCheck className="w-3 h-3" /> all caught up
@@ -100,10 +100,10 @@ export default function AlertsBell() {
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto">
             {alerts.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-500 italic">
-                <Bell className="w-6 h-6 mx-auto mb-2 text-slate-600" />
+              <div className="p-6 text-center text-xs text-slate-500 italic">
+                <Bell className="w-5 h-5 mx-auto mb-2 text-slate-600" />
                 No changes detected yet. Run a second scan to establish a baseline.
               </div>
             ) : (
@@ -112,18 +112,18 @@ export default function AlertsBell() {
                 const Icon = meta.icon;
                 const time = a.created_at ? new Date(a.created_at * 1000).toLocaleString() : '';
                 return (
-                  <div key={a.id} className="p-3 border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors">
-                    <div className="flex items-start gap-2.5">
-                      <div className={`p-1.5 rounded-lg border shrink-0 ${meta.bg}`}>
-                        <Icon className={`w-3.5 h-3.5 ${meta.color}`} />
+                  <div key={a.id} className="px-3 py-2 border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors">
+                    <div className="flex items-start gap-2">
+                      <div className={`p-1 rounded-lg border shrink-0 ${meta.bg}`}>
+                        <Icon className={`w-3 h-3 ${meta.color}`} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-slate-200 leading-snug">{a.title}</p>
+                        <p className="text-[11px] font-semibold text-slate-200 leading-snug">{a.title}</p>
                         {a.detail && <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">{a.detail}</p>}
-                        <p className="text-[9px] text-slate-600 mt-1">{time}</p>
+                        <p className="text-[9px] text-slate-600 mt-0.5">{time}</p>
                       </div>
                       {a.severity === 'critical' && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30 shrink-0">CRIT</span>
+                        <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30 shrink-0">CRIT</span>
                       )}
                     </div>
                   </div>
