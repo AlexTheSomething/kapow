@@ -47,6 +47,7 @@ class BackendAPI:
         self.scan_store = ScanStore()
         self.sniffer = PassiveSnifferEngine()
         self.sniffer.start_listeners()
+        self.scanner.passive_sniffer = self.sniffer
         self._active_task: Optional[asyncio.Task] = None
         # Background scan scheduler (wired after start_scan is bound)
         self.scheduler = ScanScheduler(self._scheduled_scan)

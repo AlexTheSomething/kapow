@@ -32,6 +32,7 @@ from backend.engines import (
     resolve_fast_sweep_engine,
 )
 from backend.scan_profiles import CustomProfileStore
+from backend.passive_sniffer import PassiveSnifferEngine, enrich_host_with_passive
 
 logger = logging.getLogger(__name__)
 asset_db = AssetDatabase()
@@ -163,6 +164,7 @@ class ScannerEngine:
         self._live_logs: List[str] = []
         self._status_text: str = "Ready"
         self._start_time: float = 0.0
+        self.passive_sniffer: Optional[PassiveSnifferEngine] = None
 
     @property
     def is_running(self) -> bool:
@@ -665,6 +667,19 @@ class ScannerEngine:
             # Enrich hosts with SQLite asset metadata (aliases, tags, notes)
             for h in parsed_data.get("hosts", []):
                 asset_db.enrich_host(h)
+
+            # Enrich with passively-discovered names/vendors (mDNS/SSDP/ARP cache)
+            try:
+                if self.passive_sniffer is not None:
+                    nodes_by_ip = {
+                        n["ip"]: n for n in self.passive_sniffer.get_discovered_nodes() if n.get("ip")
+                    }
+                    for h in parsed_data.get("hosts", []):
+                        ip = h.get("ip") or h.get("ipv4")
+                        if ip and ip in nodes_by_ip:
+                            enrich_host_with_passive(h, nodes_by_ip[ip])
+            except Exception:
+                logger.debug("Passive enrichment skipped", exc_info=True)
 
             ag_grid_rows = to_ag_grid(parsed_data)
             cytoscape_elements = to_cytoscape(parsed_data)

@@ -27,43 +27,259 @@ logger = logging.getLogger(__name__)
 # ────────────────────────────────────────────────────────────────
 
 MAC_OUI_DATABASE = {
+    # ── Virtualization / Hypervisors ──
     "00:0C:29": "VMware, Inc.",
     "00:50:56": "VMware, Inc.",
+    "00:05:69": "VMware, Inc.",
     "08:00:27": "Oracle VirtualBox",
+    "00:1C:42": "Parallels, Inc.",
+    "00:16:3E": "XenSource / Citrix",
+    "52:54:00": "QEMU / KVM",
+    "F0:1F:AF": "Microsoft Hyper-V",
+    "00:15:5D": "Microsoft Corporation (Hyper-V)",
+    "DC:41:A9": "Microsoft Corporation",
+    # ── Raspberry Pi / IoT ──
     "B8:27:EB": "Raspberry Pi Foundation",
     "DC:A6:32": "Raspberry Pi Trading",
     "E4:5F:01": "Raspberry Pi Trading",
+    "D8:3A:DD": "Raspberry Pi Trading",
+    "24:6F:28": "Espressif Inc. (ESP32/ESP8266 IoT)",
+    "30:AE:A4": "Espressif Inc. (ESP32/ESP8266 IoT)",
+    "84:CC:A8": "Espressif Inc. (ESP32/ESP8266 IoT)",
+    "3C:71:BF": "Espressif Inc. (ESP32/ESP8266 IoT)",
+    "AC:67:B2": "Espressif Inc. (ESP32/ESP8266 IoT)",
+    "CC:50:E3": "Espressif Inc. (ESP32/ESP8266 IoT)",
+    # ── Google ──
     "00:1A:11": "Google, Inc.",
     "F4:F5:D8": "Google, Inc.",
     "3C:5A:B4": "Google, Inc.",
-    "00:17:88": "Philips Lighting (Hue)",
+    "00:1D:25": "Google, Inc.",
+    "D0:33:11": "Google, Inc. (Nest)",
+    "74:90:50": "Google, Inc. (Nest)",
+    # ── Apple ──
     "00:1E:C2": "Apple, Inc.",
     "AC:DE:48": "Apple, Inc.",
     "F0:18:98": "Apple, Inc.",
     "3C:06:30": "Apple, Inc.",
     "40:6C:8F": "Apple, Inc.",
-    "00:15:5D": "Microsoft Corporation (Hyper-V)",
-    "DC:41:A9": "Microsoft Corporation",
-    "00:04:4B": "NVIDIA Corporation",
-    "48:B0:2D": "NVIDIA Corporation",
-    "00:1A:79": "Ubiquiti Networks",
-    "78:8A:20": "Ubiquiti Networks",
+    "84:38:35": "Apple, Inc.",
+    "A8:20:66": "Apple, Inc.",
+    "F4:5C:89": "Apple, Inc.",
+    "98:5A:EB": "Apple, Inc.",
+    "00:03:93": "Apple, Inc.",
+    "00:17:F2": "Apple, Inc.",
+    "00:1F:5B": "Apple, Inc.",
+    # ── Amazon ──
+    "00:FC:8B": "Amazon Technologies",
+    "74:75:48": "Amazon Technologies",
+    "F0:81:73": "Amazon Technologies (Echo)",
+    "68:37:E9": "Amazon Technologies (Echo)",
+    "44:65:0D": "Amazon Technologies",
+    # ── Samsung ──
+    "00:1A:80": "Samsung Electronics",
+    "8C:B1:9B": "Samsung Electronics",
+    "D4:62:EA": "Samsung Electronics",
+    "5C:49:79": "Samsung Electronics",
+    "C8:BD:B0": "Samsung Electronics",
+    "F4:09:D8": "Samsung Electronics",
+    "CC:08:FB": "Samsung Electronics",
+    "00:12:47": "Samsung Electronics",
+    # ── Sony ──
+    "50:02:91": "Sony Interactive (PlayStation)",
+    "00:1D:0A": "Sony Corporation",
+    "28:6D:97": "Sony Corporation",
+    "A4:6B:B0": "Sony Corporation",
+    "AC:9E:17": "Sony Corporation",
+    # ── Microsoft / Xbox ──
+    "00:1E:7F": "Microsoft Corporation",
+    "7C:ED:8D": "Microsoft Corporation (Xbox)",
+    "F0:DB:E2": "Microsoft Corporation (Xbox)",
+    # ── TP-Link / Networking ──
     "AC:8B:A9": "TP-Link Technologies",
     "50:C7:BF": "TP-Link Technologies",
     "00:14:D1": "TP-Link Technologies",
-    "24:6F:28": "Espressif Inc. (ESP32/ESP8266 IoT)",
-    "30:AE:A4": "Espressif Inc. (ESP32/ESP8266 IoT)",
-    "84:CC:A8": "Espressif Inc. (ESP32/ESP8266 IoT)",
+    "B0:4E:26": "TP-Link Technologies",
+    "C0:25:E9": "TP-Link Technologies",
+    "F4:6D:04": "TP-Link Technologies",
+    "94:D9:B3": "TP-Link Technologies",
+    # ── Ubiquiti ──
+    "00:1A:79": "Ubiquiti Networks",
+    "78:8A:20": "Ubiquiti Networks",
+    "FC:EC:DA": "Ubiquiti Networks",
+    "24:5A:4C": "Ubiquiti Networks",
+    "B4:FB:E4": "Ubiquiti Networks",
+    # ── Cisco / Linksys ──
     "00:1A:2B": "Cisco Systems",
     "00:26:0B": "Cisco Systems",
+    "00:18:39": "Cisco Systems (Linksys)",
+    "C8:D7:19": "Cisco Systems (Linksys)",
+    "58:6D:8F": "Cisco Systems (Linksys)",
+    "00:0F:66": "Cisco Systems (Linksys)",
+    "00:1C:10": "Cisco Systems (Linksys)",
+    "00:21:29": "Cisco Systems (Linksys)",
+    "14:91:82": "Cisco Systems (Meraki)",
+    "00:18:0A": "Cisco Systems (Meraki)",
+    # ── NETGEAR ──
+    "00:26:F2": "NETGEAR",
+    "C0:FF:D4": "NETGEAR",
+    "F8:E9:03": "NETGEAR",
+    "A0:40:A0": "NETGEAR",
+    "28:80:3F": "NETGEAR",
+    "EC:71:DB": "NETGEAR",
+    "10:0C:6B": "NETGEAR",
+    "B0:7F:B9": "NETGEAR",
+    # ── ASUS ──
+    "00:1B:FC": "ASUS",
+    "04:D9:F5": "ASUS",
+    "18:D6:C7": "ASUS",
+    "24:4B:FE": "ASUS",
+    "70:4D:7B": "ASUS",
+    "C8:5B:76": "ASUS",
+    # ── D-Link ──
+    "00:1B:11": "D-Link",
+    "14:CC:20": "D-Link",
+    "1C:7E:E5": "D-Link",
+    "28:31:B4": "D-Link",
+    "3C:46:D8": "D-Link",
+    "5C:62:8B": "D-Link",
+    "84:C9:B2": "D-Link",
+    "F0:9F:C2": "D-Link",
+    # ── Intel ──
     "00:0E:08": "Intel Corporation",
     "00:1B:21": "Intel Corporation",
+    "00:15:00": "Intel Corporation",
+    "68:05:CA": "Intel Corporation",
+    "98:FA:9B": "Intel Corporation",
+    "D8:3B:BF": "Intel Corporation",
+    "F4:06:69": "Intel Corporation",
+    # ── Dell ──
     "34:E6:D7": "Dell Inc.",
     "F8:DB:88": "Dell Inc.",
+    "00:14:22": "Dell Inc.",
+    "00:21:70": "Dell Inc.",
+    "B0:83:FE": "Dell Inc.",
+    "28:F1:0E": "Dell Inc.",
+    "C8:1F:66": "Dell Inc.",
+    # ── HP / HPE ──
     "00:25:B3": "Hewlett Packard",
     "9C:8E:99": "Hewlett Packard",
-    "00:1A:80": "Samsung Electronics",
-    "50:02:91": "Sony Interactive (PlayStation)",
+    "00:1E:0B": "Hewlett Packard",
+    "B4:99:BA": "Hewlett Packard",
+    "C4:34:6B": "Hewlett Packard Enterprise",
+    "00:17:08": "Hewlett Packard Enterprise",
+    # ── Huawei ──
+    "00:1E:10": "Huawei Technologies",
+    "34:AE:A7": "Huawei Technologies",
+    "C4:14:3C": "Huawei Technologies",
+    "54:13:79": "Huawei Technologies",
+    "E0:06:30": "Huawei Technologies",
+    "8C:1D:96": "Huawei Technologies",
+    # ── NVIDIA ──
+    "00:04:4B": "NVIDIA Corporation",
+    "48:B0:2D": "NVIDIA Corporation",
+    "F4:4E:FD": "NVIDIA Corporation",
+    # ── Philips / Hue ──
+    "00:17:88": "Philips Lighting (Hue)",
+    "EC:B5:FA": "Philips Lighting (Hue)",
+    "00:60:69": "Philips",
+    # ── Xiaomi ──
+    "50:8F:4C": "Xiaomi Communications",
+    "34:CE:00": "Xiaomi Communications",
+    "64:09:C8": "Xiaomi Communications",
+    "A4:AE:11": "Xiaomi Communications",
+    "F8:A0:3D": "Xiaomi Communications",
+    "88:43:E1": "Xiaomi Communications",
+    # ── Aruba / HPE Networking ──
+    "00:1A:1E": "Aruba Networks",
+    "00:0B:86": "Aruba Networks",
+    "20:4C:03": "Aruba Networks",
+    "8C:FD:F0": "Aruba Networks",
+    # ── Brother (Printers) ──
+    "00:1B:A9": "Brother Industries",
+    "08:BD:43": "Brother Industries",
+    "9C:93:4E": "Brother Industries",
+    "B0:0C:9F": "Brother Industries",
+    "D8:61:62": "Brother Industries",
+    # ── Canon ──
+    "00:00:85": "Canon",
+    "00:1E:8F": "Canon",
+    "AC:9C:E4": "Canon",
+    "B8:5B:14": "Canon",
+    # ── Epson ──
+    "00:26:AB": "Seiko Epson",
+    "64:69:0E": "Seiko Epson",
+    "00:80:92": "Seiko Epson",
+    "48:8A:D2": "Seiko Epson",
+    # ── LG ──
+    "00:1F:BD": "LG Electronics",
+    "C0:3C:59": "LG Electronics",
+    "E8:88:04": "LG Electronics",
+    "38:60:77": "LG Electronics",
+    # ── Logitech ──
+    "00:1F:1F": "Logitech",
+    "BC:5C:4C": "Logitech",
+    "74:4D:28": "Logitech",
+    # ── Synology / QNAP (NAS) ──
+    "00:11:32": "Synology",
+    "00:08:9B": "QNAP Systems",
+    "24:5E:BE": "QNAP Systems",
+    # ── Western Digital ──
+    "00:90:A9": "Western Digital",
+    "84:5B:12": "Western Digital",
+    "D8:6C:63": "Western Digital",
+    # ── Roku ──
+    "00:0D:4B": "Roku, Inc.",
+    "B8:3E:59": "Roku, Inc.",
+    "DC:1C:B6": "Roku, Inc.",
+    # ── Nintendo ──
+    "00:1C:BE": "Nintendo Co., Ltd.",
+    "34:AF:2C": "Nintendo Co., Ltd.",
+    "F4:0F:24": "Nintendo Co., Ltd.",
+    # ── Netgear / Orbi ──
+    "00:0F:B5": "NETGEAR (Orbi)",
+    "06:99:24": "NETGEAR (Orbi)",
+    # ── Ubiquiti UniFi ──
+    "00:27:22": "Ubiquiti (UniFi)",
+    "B4:2E:99": "Ubiquiti (UniFi)",
+    # ── MikroTik ──
+    "00:0C:42": "MikroTik",
+    "4C:5E:0C": "MikroTik",
+    "D4:CA:6D": "MikroTik",
+    # ── Zyxel ──
+    "00:A0:C5": "Zyxel Communications",
+    "28:28:5D": "Zyxel Communications",
+    "60:31:97": "Zyxel Communications",
+    # ── Tenda ──
+    "00:1F:0D": "Tenda",
+    "C8:3A:35": "Tenda",
+    "50:2B:73": "Tenda",
+    # ── OnePlus / Oppo / Vivo ──
+    "9C:1E:40": "OnePlus",
+    "68:3C:81": "OnePlus",
+    "8C:5A:EE": "Oppo",
+    "40:C6:2A": "Vivo",
+    # ── Lenovo ──
+    "00:21:CC": "Lenovo",
+    "28:92:4A": "Lenovo",
+    "50:7B:9D": "Lenovo",
+    # ── Acer ──
+    "00:23:8B": "Acer",
+    "00:1E:65": "Acer",
+    "20:6A:8A": "Acer",
+    # ── Kyocera (Printers) ──
+    "00:80:98": "Kyocera",
+    "00:60:12": "Kyocera",
+    # ── Oracle / Sun ──
+    "00:30:48": "Oracle (Sun)",
+    "08:00:20": "Sun Microsystems",
+    # ── Broadcom / Generic NICs ──
+    "00:10:18": "Broadcom",
+    "00:0A:F7": "Broadcom",
+    "B8:AC:6F": "Broadcom",
+    "3C:52:82": "Broadcom",
+    # ── Realtek (many embedded devices) ──
+    "00:E0:4C": "Realtek Semiconductor",
+    "B0:26:80": "Realtek Semiconductor",
 }
 
 
@@ -611,3 +827,50 @@ class PassiveSnifferEngine:
         """Clear discovered nodes memory."""
         with self._listener_lock:
             self._discovered_nodes.clear()
+
+    def get_node_for_ip(self, ip: str) -> Optional[Dict[str, Any]]:
+        """Return the passively-discovered metadata for a given IP, if any."""
+        with self._listener_lock:
+            return self._discovered_nodes.get(ip)
+
+
+def enrich_host_with_passive(host: Dict[str, Any], passive_node: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Merge passive discovery metadata into an active-scan host dict (non-destructive).
+
+    Only fills fields that the active scan did NOT already populate:
+    - primary_hostname / hostname (mDNS/SSDP give names nmap often misses)
+    - vendor (if host has a MAC but unknown vendor)
+    - device_type hint from passive service labels
+    Returns the same host dict (mutated in place for performance).
+    """
+    if not passive_node:
+        return host
+
+    # Hostname — passive name wins only if active scan had none
+    if not host.get("primary_hostname") and not host.get("hostname"):
+        ph = passive_node.get("hostname") or ""
+        if ph:
+            host["primary_hostname"] = ph
+            host.setdefault("hostnames", []).append({"name": ph, "type": "passive"})
+
+    # Vendor — fill if host has MAC but empty vendor
+    mac = host.get("mac") or ""
+    if mac and not host.get("vendor"):
+        pv = passive_node.get("vendor") or ""
+        if pv and pv != "Standard Network Interface":
+            host["vendor"] = pv
+        elif not pv:
+            host["vendor"] = lookup_vendor(mac)
+
+    # Device-type hint from passive service label (e.g. "googlecast", "airplay")
+    svc = passive_node.get("service") or ""
+    if svc and not host.get("passive_service"):
+        host["passive_service"] = svc
+
+    # mDNS/SSDP details (txt records, model, location) for the profiler
+    details = passive_node.get("details") or {}
+    if details:
+        host.setdefault("passive_details", {}).update(details)
+
+    return host
