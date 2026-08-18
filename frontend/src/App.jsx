@@ -1,48 +1,513 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import Topology from './components/Topology';
-import ErrorBoundary from './components/ErrorBoundary';
-
-// Minimal bootstrap baseline: header + topology canvas that auto-loads a
-// sample network so SOMETHING is always visible. Premium panels (tabs,
-// inventory, alerts, console, settings) are layered back on once this
-// renders reliably.
-
-const buildSample = () => {
-  const hosts = [
-    { ip: '192.168.1.1', type: 'router', label: 'gateway', risk_level: 'LOW' },
-    { ip: '192.168.1.20', type: 'host', label: 'pi-homelab', risk_level: 'LOW' },
-    { ip: '192.168.1.35', type: 'host', label: 'router.asus', risk_level: 'MEDIUM' },
-    { ip: '192.168.1.77', type: 'host', label: 'nas', risk_level: 'HIGH' },
-    { ip: '192.168.1.90', type: 'host', label: 'vm-win', risk_level: 'CRITICAL' },
-  ];
-  const nodes = [
-    { data: { id: 'subnet-0', type: 'subnet', label: '192.168.1.0/24' } },
-    ...hosts.map((h) => ({ data: { id: `host-${h.ip}`, type: h.type, label: h.label, ip: h.ip } })),
-  ];
-  const edges = hosts.map((h) => ({ data: { id: `e-${h.ip}`, source: 'subnet-0', target: `host-${h.ip}` } }));
-  return { nodes, edges };
-};
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Header from './components/Header';
+import Home from './components/Home';
+import HostCards from './components/HostCards';
+import ScanDiff from './components/ScanDiff';
+import HostProfiler from './components/HostProfiler';
+import ConsoleDrawer from './components/ConsoleDrawer';
+import SuggestionPanel from './components/SuggestionPanel';
+import StatusBar from './components/StatusBar';
+import Settings from './components/Settings';
+import AlertsBell from './components/AlertsBell';
+import { Network, Table, GitCompare, Terminal, Sparkles, Settings as SettingsIcon, X } from 'lucide-react';
 
 export default function App() {
-  const [elements, setElements] = useState(() => buildSample());
+  // ── Scan Form State ──
+  const [target, setTarget] = useState('127.0.0.1');
+  const [ports, setPorts] = useState('');
+  const [scanProfile, setScanProfile] = useState('quick');
+  const [requiresRoot, setRequiresRoot] = useState(false);
+  const [scripts, setScripts] = useState('');
 
-  const handleSelectHost = useCallback((data) => {
-    // eslint-disable-next-line no-console
-    console.log('selected host:', data);
+  // ── App State ──
+  const [isScanning, setIsScanning] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('Ready');
+  const [error, setError] = useState(null);
+  const [scanData, setScanData] = useState(null);
+  const [selectedHost, setSelectedHost] = useState(null);    // drill-down host
+  const [activeTab, setActiveTab] = useState('home');
+  const [liveLogs, setLiveLogs] = useState([]);
+  const [scanHistory, setScanHistory] = useState([]);
+  const [networkInterfaces, setNetworkInterfaces] = useState([]);
+  const [monitoredPingIp, setMonitoredPingIp] = useState('127.0.0.1');
+  const [passiveDevices, setPassiveDevices] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showConsole, setShowConsole] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const [dependencies, setDependencies] = useState({
+    nmap: { installed: false, path: '' },
+    rustscan: { installed: false, path: '' },
+    masscan: { installed: false, path: '' },
+    naabu: { installed: false, path: '' },
+    is_elevated: false,
+    platform: 'unknown',
+  });
+
+  const pollingRef = useRef(null);
+
+  // ── IPC helper ──
+  const getPyApi = useCallback(() => {
+    if (window.pywebview && window.pywebview.api) return window.pywebview.api;
+    return null;
   }, []);
 
+  // ── Environment load ──
+  const refreshEnvironment = useCallback(async () => {
+    const api = getPyApi();
+    if (!api) return;
+    try {
+      if (api.check_dependencies) {
+        const deps = await api.check_dependencies();
+        setDependencies(deps);
+      }
+      if (api.get_network_interfaces) {
+        const ifaces = await api.get_network_interfaces();
+        if (ifaces?.success) {
+          setNetworkInterfaces(ifaces.interfaces || []);
+          if (ifaces.primary?.cidr) setTarget(ifaces.primary.cidr);
+        }
+      }
+      // Hydrate scan history
+      if (api.list_scan_history && api.get_scan_history_item) {
+        const listed = await api.list_scan_history(20);
+        if (listed?.success && Array.isArray(listed.scans)) {
+          const hydrated = [];
+          for (const meta of listed.scans) {
+            try {
+              const full = await api.get_scan_history_item(meta.id);
+              if (full?.success && full.scan) {
+                hydrated.push({
+                  id: meta.id,
+                  target: meta.target,
+                  scanProfile: meta.scan_profile,
+                  timestamp: new Date((meta.created_at || 0) * 1000).toLocaleString(),
+                  hostsCount: meta.hosts_count,
+                  data: full.scan,
+                  persisted: true,
+                });
+              }
+            } catch (e) { /* skip */ }
+          }
+          if (hydrated.length) setScanHistory(hydrated);
+        }
+      }
+      // Start passive device polling
+      if (api.get_passive_discovered_devices) {
+        const pollPassive = async () => {
+          const res = await api.get_passive_discovered_devices();
+          if (res?.success) setPassiveDevices(res.devices || []);
+        };
+        pollPassive();
+        setInterval(pollPassive, 5000);
+      }
+    } catch (err) {
+      console.error('Environment fetch failed:', err);
+    }
+  }, [getPyApi]);
+
+  useEffect(() => {
+    window.addEventListener('pywebviewready', refreshEnvironment);
+    refreshEnvironment();
+    return () => {
+      window.removeEventListener('pywebviewready', refreshEnvironment);
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [refreshEnvironment]);
+
+  // ── Start Scan ──
+  const handleStartScan = async (customTarget = null) => {
+    const scanTarget = (customTarget || target).trim();
+    if (!scanTarget) return;
+    setError(null);
+    setIsScanning(true);
+    setActiveTab('home');
+    setShowConsole(true);
+    setLiveLogs([`[*] Initializing ${scanProfile} scan against ${scanTarget}...`]);
+    setStatusMessage(`Scanning ${scanTarget}...`);
+
+    const api = getPyApi();
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    pollingRef.current = setInterval(async () => {
+      const a = getPyApi();
+      if (a?.get_live_state) {
+        try {
+          const state = await a.get_live_state();
+          if (state?.logs?.length) setLiveLogs(state.logs);
+          if (state?.status) setStatusMessage(state.status);
+        } catch (_) {}
+      }
+    }, 600);
+
+    if (api?.start_scan) {
+      try {
+        const result = await api.start_scan(scanTarget, ports, requiresRoot, scanProfile, scripts);
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        if (result.success) {
+          setScanData(result);
+          if (result.logs) setLiveLogs(result.logs);
+          const hostCount = result.data?.hosts?.length || 0;
+          setStatusMessage(`Scan complete: ${hostCount} host(s) discovered.`);
+          setError(null);
+
+          // Local history fallback
+          setScanHistory((prev) => [{
+            id: Date.now(),
+            target: scanTarget,
+            scanProfile,
+            timestamp: new Date().toLocaleTimeString(),
+            hostsCount: hostCount,
+            data: result,
+          }, ...prev.slice(0, 9)]);
+
+          // Load tag suggestions
+          if (api.suggest_tags) {
+            const sug = await api.suggest_tags(result);
+            if (sug?.success && sug.count > 0) {
+              setSuggestions(sug.suggestions);
+            }
+          }
+        } else {
+          setError(result.error || 'Scan failed.');
+          if (result.logs) setLiveLogs(result.logs);
+          setStatusMessage('Scan terminated with errors.');
+        }
+      } catch (err) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        setError(`Scan error: ${err.message || err}`);
+        setStatusMessage('Scan failed.');
+      } finally {
+        setIsScanning(false);
+      }
+    }
+  };
+
+  const handleCancelScan = async () => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    const api = getPyApi();
+    if (api?.cancel_scan) await api.cancel_scan();
+    setIsScanning(false);
+  };
+
+  // Auto-load a sample network on first mount so the topology is never blank.
+  useEffect(() => {
+    if (!scanData) handleLoadSample();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLoadSample = async () => {
+    setError(null);
+    const api = getPyApi();
+    if (api?.load_sample_scan) {
+      const sample = await api.load_sample_scan();
+      setScanData(sample);
+      if (sample.logs) setLiveLogs(sample.logs);
+      setStatusMessage('Sample network loaded.');
+    } else {
+      // Fallback: render a built-in sample so the topology is always viewable
+      // (e.g. when running the dev frontend without the pywebview backend).
+      const sample = buildFallbackSample();
+      setScanData(sample);
+      setStatusMessage('Sample network loaded (offline preview).');
+    }
+  };
+
+  // Minimal offline sample topology used when no pywebview backend is present.
+  const buildFallbackSample = () => ({
+    success: true,
+    target: '192.168.1.0/24',
+    scan_profile: 'comprehensive',
+    hostsCount: 6,
+    timestamp: new Date().toLocaleString(),
+    logs: ['[offline] Demo data generated client-side'],
+    data: {
+      hosts: [
+        { ip: '192.168.1.1', mac: '00:0C:29:AA:BB:01', vendor: 'VMware, Inc.', primary_hostname: 'gateway.local', hostname: 'gateway.local', os: 'Router firmware', risk_level: 'LOW', ports: [{ portid: '53', state: 'open', service: { name: 'domain' } }, { portid: '80', state: 'open', service: { name: 'http' } }], tags: [] },
+        { ip: '192.168.1.20', mac: 'B8:27:EB:AA:BB:02', vendor: 'Raspberry Pi Foundation', primary_hostname: 'pi-homelab.local', hostname: 'pi-homelab.local', os: 'Linux', risk_level: 'LOW', ports: [{ portid: '22', state: 'open', service: { name: 'ssh' } }], tags: [] },
+        { ip: '192.168.1.35', mac: '00:1B:FC:AA:BB:03', vendor: 'ASUS', primary_hostname: '', hostname: 'router.asus.lan', os: 'ASUS Router', risk_level: 'MEDIUM', ports: [{ portid: '443', state: 'open', service: { name: 'https' } }], tags: [] },
+        { ip: '192.168.1.50', mac: 'DC:A6:32:AA:BB:04', vendor: 'Raspberry Pi', primary_hostname: 'sensor.local', hostname: 'sensor.local', os: 'Linux', risk_level: 'LOW', ports: [{ portid: '8080', state: 'open', service: { name: 'http-alt' } }], tags: [] },
+        { ip: '192.168.1.77', mac: '00:11:32:AA:BB:05', vendor: 'Synology', primary_hostname: 'nas.local', hostname: 'nas.local', os: 'Linux', risk_level: 'HIGH', max_cvss: 8.1, ports: [{ portid: '445', state: 'open', service: { name: 'microsoft-ds' } }], tags: [] },
+        { ip: '192.168.1.90', mac: '08:00:27:AA:BB:06', vendor: 'Oracle VirtualBox', primary_hostname: 'vm-win.local', hostname: 'vm-win.local', os: 'Windows', risk_level: 'CRITICAL', max_cvss: 9.8, ports: [{ portid: '3389', state: 'open', service: { name: 'ms-wbt-server' } }, { portid: '139', state: 'open', service: { name: 'netbios-ssn' } }], tags: [] },
+      ],
+      subnets: [{ cidr: '192.168.1.0/24', gateway: '192.168.1.1' }],
+    },
+    cytoscape: { nodes: [], edges: [] },
+    ag_grid: [],
+  });
+
+  // Build a cytoscape topology (subnet + hosts + router) so the canvas renders
+  // even in the offline fallback. Mirrors backend scanner.get_sample_data shape.
+  const hosts = sample.data.hosts;
+  const gw = hosts.find((h) => h.risk_level === 'LOW' && h.ports.some((p) => p.portid === '53')) || hosts[0];
+  const nodes = [
+    { data: { id: 'subnet-0', type: 'subnet', label: '192.168.1.0/24', ip: '192.168.1.0/24' } },
+    ...hosts.map((h) => ({
+      data: {
+        id: `host-${h.ip}`, type: 'host', ip: h.ip, label: h.primary_hostname || h.hostname || h.ip,
+        primary_hostname: h.primary_hostname, hostname: h.hostname, mac: h.mac, vendor: h.vendor,
+        os: h.os, risk_level: h.risk_level, max_cvss: h.max_cvss, alias: '',
+      },
+    })),
+  ];
+  const edges = hosts.map((h) => ({ data: { id: `e-${h.ip}`, source: 'subnet-0', target: `host-${h.ip}` } }));
+  sample.cytoscape = { nodes, edges };
+
+  // ── Asset / Protocol / Telemetry ──
+  const handleSaveAsset = async (assetData) => {
+    const api = getPyApi();
+    if (api?.save_asset_metadata) {
+      try {
+        return await api.save_asset_metadata(assetData);
+      } catch (e) { return { success: false, error: String(e) }; }
+    }
+    return { success: true };
+  };
+
+  const handleLaunchProtocol = async (protocol, ip, port = null) => {
+    const api = getPyApi();
+    if (api?.launch_remote_tool) {
+      try { return await api.launch_remote_tool(protocol, ip, port); } catch (_) {}
+    }
+  };
+
+  const handlePingTelemetry = async (ip) => {
+    const api = getPyApi();
+    if (api?.ping_host_telemetry) {
+      try { return await api.ping_host_telemetry(ip); } catch (_) {}
+    }
+  };
+
+  const handleCompareScans = async (scanA, scanB) => {
+    const api = getPyApi();
+    if (api?.compare_scan_snapshots) {
+      try { return await api.compare_scan_snapshots(scanA, scanB); } catch (_) {}
+    }
+    return null;
+  };
+
+  const handleExport = async (format) => {
+    if (!scanData) return;
+    const api = getPyApi();
+    if (api?.export_results) {
+      const exp = await api.export_results(scanData, format);
+      if (exp.success) {
+        const blob = new Blob([exp.content], {
+          type: format === 'json' ? 'application/json' : format === 'xml' ? 'text/xml' : 'text/csv'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = exp.filename || `scan.${format}`; a.click();
+        URL.revokeObjectURL(url);
+      }
+    }
+  };
+
+  // ── Suggestion handlers ──
+  const handleAcceptSuggestion = async (s) => {
+    // Fetch existing tags for this host and merge
+    const existingHost = hostsList.find((h) => (h.ip || h.ipv4) === s.ip);
+    const existingTags = existingHost?.tags || [];
+    const newTags = [...new Set([...existingTags, s.tag])];
+    setSuggestions((prev) => prev.filter((x) => !(x.ip === s.ip && x.tag === s.tag)));
+    await handleSaveAsset({ ip: s.ip, mac: existingHost?.mac || '', tags: newTags, risk_level: 'LOW' });
+  };
+
+  const handleDismissAllSuggestions = () => setSuggestions([]);
+
+  // ── Render helpers ──
+  const hostsList = scanData?.data?.hosts || [];
+
+  const TABS = [
+    { id: 'home', label: 'Home', icon: Network, badge: hostsList.length || null },
+    { id: 'grid', label: 'Inventory', icon: Table, badge: scanData?.ag_grid?.length || null },
+    { id: 'diff', label: 'Changes', icon: GitCompare },
+  ];
+
+  // If a host is selected for drill-down, show the profiler instead of tabs
+  if (selectedHost) {
+    const hostObj = selectedHost?.host || selectedHost;
+    return (
+      <div className="flex flex-col h-screen w-screen bg-dark-950 text-slate-100 overflow-hidden select-none">
+        <HostProfiler
+          host={hostObj}
+          initialPort={selectedHost?.initialPort || null}
+          scanData={scanData}
+          onBack={() => setSelectedHost(null)}
+          onSaveAsset={handleSaveAsset}
+          onLaunchProtocol={handleLaunchProtocol}
+          onPingTelemetry={handlePingTelemetry}
+        />
+        <ConsoleDrawer
+          logs={liveLogs}
+          isScanning={isScanning}
+          isOpen={showConsole}
+          onToggle={() => setShowConsole(!showConsole)}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-screen w-full bg-dark-950 text-slate-100">
-      <header className="flex items-center gap-3 px-4 py-2 bg-dark-900 border-b border-slate-800 shrink-0">
-        <span className="font-bold text-brand-cyan">Kapow</span>
-        <span className="text-xs text-slate-400">Network Security Auditor</span>
-        <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">v1.5</span>
-      </header>
-      <main className="flex-1 min-h-0">
-        <ErrorBoundary>
-          <Topology elements={elements} onSelectHost={handleSelectHost} />
-        </ErrorBoundary>
-      </main>
+    <div className="flex flex-col h-screen w-screen bg-dark-950 text-slate-100 overflow-hidden select-none relative">
+      <div className="app-accent w-full shrink-0" />
+      {/* ── Header ── */}
+      <Header
+        dependencies={dependencies}
+        onLoadSample={handleLoadSample}
+        onExport={handleExport}
+        isScanning={isScanning}
+        onRefreshDeps={refreshEnvironment}
+        scanData={scanData}
+      />
+
+      {/* ── Tab Bar ── */}
+      <div className="px-6 border-b border-slate-800 bg-dark-950/90 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition-all ${
+                activeTab === tab.id
+                  ? 'border-brand-cyan text-brand-cyan bg-cyan-500/5'
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
+              {tab.badge ? (
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-mono">
+                  {tab.badge}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Change alerts bell */}
+          <AlertsBell />
+          {/* Settings */}
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={`p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all ${showSettings ? 'bg-slate-800 text-white' : ''}`}
+          >
+            <SettingsIcon className="w-4 h-4" />
+          </button>
+          {/* Toggle console */}
+          <button
+            onClick={() => setShowConsole(!showConsole)}
+            className={`p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all ${showConsole ? 'bg-slate-800 text-cyan-400' : ''}`}
+          >
+            <Terminal className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Main Content ── */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {/* Tab content + suggestion panel */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div key={activeTab} className="flex-1 min-h-0 overflow-hidden animate-fade-in">
+              {activeTab === 'home' && (
+                <Home
+                  target={target}
+                  setTarget={setTarget}
+                  scanProfile={scanProfile}
+                  setScanProfile={setScanProfile}
+                  isScanning={isScanning}
+                  onStartScan={handleStartScan}
+                  onCancelScan={handleCancelScan}
+                  networkInterfaces={networkInterfaces}
+                  scanData={scanData}
+                  scanHistory={scanHistory}
+                  passiveDevices={passiveDevices}
+                  suggestionCount={suggestions.filter((s) => s.color !== 'slate').length}
+                  onOpenSuggestions={() => setShowSuggestions(true)}
+                  onSelectHost={(hostData) => {
+                    // Map topology click to full host data.
+                    // hostData may be a cytoscape node {data: {...}} or node.data() plain.
+                    const d = hostData?.data || hostData || {};
+                    const ip = d.ip || d.host_ip || '';
+                    const found = hostsList.find((h) => h.ip === ip || h.ipv4 === ip);
+                    if (found) {
+                      setSelectedHost({ host: found, initialPort: d.port || null });
+                    } else if (ip) {
+                      // Fallback: open profiler with minimal info (host not in current scan)
+                      setSelectedHost({ host: { ip, hostname: d.hostname || d.label || '', ports: [] }, initialPort: null });
+                    }
+                  }}
+                  onScanLan={(cidr) => handleStartScan(cidr)}
+                />
+              )}
+
+              {activeTab === 'grid' && (
+                <HostCards
+                  hosts={hostsList}
+                  onSelectHost={({ host, initialPort }) => {
+                    setSelectedHost({ host: host || {}, initialPort: initialPort || null });
+                  }}
+                  onLaunchProtocol={handleLaunchProtocol}
+                />
+              )}
+
+              {activeTab === 'diff' && (
+                <ScanDiff
+                  scanHistory={scanHistory}
+                  currentScan={scanData}
+                  onCompareScans={handleCompareScans}
+                />
+              )}
+            </div>
+
+            {/* Error banner */}
+            {error && (
+              <div className="mx-4 mb-1 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center justify-between animate-slide-up">
+                <span>{error}</span>
+                <button onClick={() => setError(null)} className="text-rose-400 hover:text-rose-200"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            )}
+
+            {/* Status bar */}
+            <StatusBar
+              isScanning={isScanning}
+              statusMessage={statusMessage}
+              error={error}
+              scanData={scanData}
+            />
+          </div>
+
+          {/* Suggestion side panel */}
+          {showSuggestions && (
+            <div className="w-80 border-l border-slate-800 bg-dark-900 flex flex-col animate-slide-right overflow-hidden shrink-0">
+              <SuggestionPanel
+                suggestions={suggestions}
+                onAccept={handleAcceptSuggestion}
+                onDismissAll={handleDismissAllSuggestions}
+                onClose={() => setShowSuggestions(false)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Console drawer (docked bottom) */}
+        <ConsoleDrawer
+          logs={liveLogs}
+          isScanning={isScanning}
+          isOpen={showConsole}
+          onToggle={() => setShowConsole(!showConsole)}
+        />
+      </div>
+
+      {/* Settings modal */}
+      {showSettings && (
+        <Settings
+          onClose={() => setShowSettings(false)}
+          dependencies={dependencies}
+          onRefreshDeps={refreshEnvironment}
+        />
+      )}
     </div>
   );
 }
