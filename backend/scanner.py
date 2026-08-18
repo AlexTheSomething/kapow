@@ -33,6 +33,7 @@ from backend.engines import (
     get_available_engines,
     resolve_fast_sweep_engine,
 )
+from backend.scan_profiles import CustomProfileStore
 
 logger = logging.getLogger(__name__)
 asset_db = AssetDatabase()
@@ -294,6 +295,45 @@ class ScannerEngine:
         """
         nmap_bin = find_cli_binary("nmap") or "nmap"
         cmd = [nmap_bin]
+
+        # Custom user profiles: resolve alias → built-in profile args
+        profile_store = CustomProfileStore()
+        if scan_type.startswith("custom_"):
+            try:
+                pid = int(scan_type.split("_", 1)[1])
+                profile = profile_store.get_profile(pid)
+                if profile and profile.get("args"):
+                    alias = profile["args"][0]  # e.g. "quick" or "comprehensive"
+                    if alias.startswith("custom_"):
+                        # chained alias — one level of indirection max
+                        inner = profile_store.get_profile(int(alias.split("_", 1)[1]))
+                        alias = (inner.get("args") or ["quick"])[0] if inner else "quick"
+                    # Rebuild command using the aliased built-in profile
+                    base_cmd = self.build_nmap_command(
+                        target="",
+                        ports=None,
+                        scan_type=alias if alias in ("ping_sweep", "quick", "quick_plus", "comprehensive", "intense", "ports_only") else "quick",
+                        requires_root=False,
+                        scripts=None,
+                        output_xml_path=output_xml_path,
+                    )
+                    # base_cmd = [nmap, ...args..., -oX path]; rebuild with target/ports
+                    cmd = base_cmd
+                    # Insert ports if provided (skip the -p already present, add ours)
+                    if ports:
+                        ports_arg = ",".join(str(p) for p in ports) if isinstance(ports, list) else str(ports).strip()
+                        if ports_arg and "-p" not in cmd:
+                            # insert before -oX
+                            ox_idx = cmd.index("-oX") if "-oX" in cmd else len(cmd)
+                            cmd = cmd[:ox_idx] + ["-p", ports_arg] + cmd[ox_idx:]
+                    # Append targets (base_cmd has no target since target="")
+                    for t in target.split():
+                        cmd.append(t.strip())
+                    if requires_root:
+                        return build_elevated_command(cmd)
+                    return cmd
+            except (ValueError, IndexError):
+                pass  # fall through to built-in profiles
 
         # Shared timing guardrails — prevent hung hosts from stalling the whole job
         timing_guards = [

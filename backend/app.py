@@ -31,6 +31,7 @@ from backend.tag_rules import suggest_tags_for_scan
 from backend.scheduler import ScanScheduler
 from backend.alerts import AlertStore, check_for_changes
 from backend.host_timeline import build_host_timeline
+from backend.scan_profiles import CustomProfileStore
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,8 @@ class BackendAPI:
             self.scheduler.start()
         # Change-detection alert store
         self.alerts = AlertStore()
+        # Custom scan profiles
+        self.custom_profiles = CustomProfileStore()
 
     def check_dependencies(self) -> Dict[str, Any]:
         """
@@ -388,6 +391,29 @@ class BackendAPI:
         """Reconstruct a host's history across all persisted scans."""
         try:
             return build_host_timeline(self.scan_store, ip)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def list_custom_profiles(self) -> Dict[str, Any]:
+        """List user-defined scan profiles."""
+        try:
+            profiles = self.custom_profiles.list_profiles()
+            return {"success": True, "profiles": profiles}
+        except Exception as e:
+            return {"success": False, "error": str(e), "profiles": []}
+
+    def save_custom_profile(self, name: str, based_on_profile_id: str, description: str = "") -> Dict[str, Any]:
+        """Save a new custom scan profile (alias for an existing profile)."""
+        try:
+            return self.custom_profiles.save_profile(name, based_on_profile_id, description)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def delete_custom_profile(self, profile_id: int) -> Dict[str, Any]:
+        """Delete a custom scan profile."""
+        try:
+            ok = self.custom_profiles.delete_profile(profile_id)
+            return {"success": ok}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
