@@ -10,7 +10,6 @@ All three methods are zero-noise: the machine only listens, never transmits.
 No admin/root privileges required — all operations use standard sockets.
 """
 
-import json
 import logging
 import re
 import socket
@@ -142,7 +141,6 @@ def parse_mdns_packet(data: bytes, src_addr: str) -> Optional[Dict[str, Any]]:
     except struct.error:
         return None
 
-    is_response = bool(flags & 0x8000)  # QR bit
     offset = 12
 
     hostname = ""
@@ -169,14 +167,12 @@ def parse_mdns_packet(data: bytes, src_addr: str) -> Optional[Dict[str, Any]]:
         if offset + 10 > len(data):
             break
         try:
-            rtype, rclass_raw, _, rdlength = struct.unpack(
+            rtype, _, _, rdlength = struct.unpack(
                 "!HHIH", data[offset : offset + 10]
             )
         except struct.error:
             break
         offset += 10
-
-        rclass = rclass_raw & 0x7FFF  # mask mDNS cache-flush / unicast-response bits
 
         if offset + rdlength > len(data):
             break

@@ -9,7 +9,6 @@ Provides secure command elevation across Linux, macOS, and Windows:
 
 import ctypes
 import os
-import platform
 import shutil
 import sys
 from typing import List, Optional

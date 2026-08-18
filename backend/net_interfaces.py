@@ -9,7 +9,6 @@ Supports both English and Bulgarian ipconfig /all output.
 
 import ipaddress
 import logging
-import os
 import re
 import socket
 import subprocess

@@ -447,7 +447,7 @@ class BackendAPI:
     ) -> Dict[str, Any]:
         """Update scheduler configuration (enabled toggle, interval, target)."""
         try:
-            config = self.scheduler.set_config(
+            self.scheduler.set_config(
                 enabled=enabled,
                 interval_minutes=interval_minutes,
                 target=target,

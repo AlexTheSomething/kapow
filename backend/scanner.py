@@ -10,8 +10,6 @@ Orchestrates 2-stage scanning pipeline:
 import asyncio
 import logging
 import os
-import re
-import shutil
 import sys
 import time
 from typing import Any, Callable, Dict, List, Optional, Union

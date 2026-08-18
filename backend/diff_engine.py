@@ -9,7 +9,7 @@ Compares two scan datasets (Baseline vs Comparison) to identify:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,6 @@ when matches exist. Users accept (persist to asset DB) or dismiss.
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import re
 from typing import Any, Dict, List, Optional
