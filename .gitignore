@@ -30,6 +30,10 @@ assets.db
 # Runtime config (scheduler state)
 schedule.json
 
+# Stray test/scan artifacts
+temp_test.xml
+*.nmap.xml
+
 # Node / Frontend
 node_modules/
 npm-debug.log*
