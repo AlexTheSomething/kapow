@@ -30,7 +30,7 @@ export default function Header({
               Kapow <span className="text-brand-cyan">Auditor</span>
             </h1>
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              v1.5
+              v1.0 Pro
             </span>
           </div>
           <p className="text-xs text-slate-400">Modern Network Security Auditor & Topology Engine</p>
