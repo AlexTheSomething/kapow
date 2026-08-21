@@ -16,7 +16,7 @@ export default function Header({
   const isElevated = dependencies?.is_elevated;
 
   return (
-    <header className="h-16 px-6 border-b border-slate-800/80 bg-dark-900/90 backdrop-blur-md flex items-center justify-between z-30 shrink-0 select-none">
+    <header className="h-16 px-6 glass-bar flex items-center justify-between z-30 shrink-0 select-none">
       {/* Brand & Title */}
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 p-0.5 flex items-center justify-center shadow-glow-cyan">

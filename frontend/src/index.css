@@ -28,30 +28,24 @@
   background: #334155;
 }
 
-/* Custom AG Grid Dark Theme Overrides */
-.ag-theme-quartz-dark {
-  --ag-background-color: #0b0f19 !important;
-  --ag-header-background-color: #0f172a !important;
-  --ag-row-hover-color: rgba(6, 182, 212, 0.08) !important;
-  --ag-selected-row-background-color: rgba(6, 182, 212, 0.15) !important;
-  --ag-border-color: #1e293b !important;
-  --ag-header-foreground-color: #94a3b8 !important;
-  --ag-foreground-color: #f1f5f9 !important;
-  --ag-odd-row-background-color: #090d16 !important;
-  --ag-font-family: 'Inter', system-ui, sans-serif !important;
-  --ag-font-size: 13px !important;
+/* Ambient living substrate behind the topology canvas */
+.ambient-substrate {
+  background-color: #020617;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 18% 12%, rgba(6, 182, 212, 0.14), transparent 60%),
+    radial-gradient(ellipse 70% 55% at 85% 28%, rgba(99, 102, 241, 0.13), transparent 55%),
+    radial-gradient(ellipse 95% 75% at 50% 105%, rgba(16, 185, 129, 0.10), transparent 60%);
+  background-size: 180% 180%;
+  animation: substrate-drift 26s ease-in-out infinite alternate;
 }
 
-.ag-theme-quartz-dark .ag-header-cell-label {
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 11px;
+@keyframes substrate-drift {
+  0%   { background-position: 0% 0%, 100% 0%, 50% 100%; }
+  100% { background-position: 100% 45%, 0% 55%, 50% 0%; }
 }
 
-.ag-theme-quartz-dark .ag-cell {
-  display: flex;
-  align-items: center;
+@media (prefers-reduced-motion: reduce) {
+  .ambient-substrate { animation: none; }
 }
 
 /* Glassmorphism card utilities */
@@ -68,4 +62,60 @@
 .glass-card-hover:hover {
   border-color: rgba(6, 182, 212, 0.4);
   box-shadow: 0 0 25px -5px rgba(6, 182, 212, 0.2);
+}
+
+/* Premium drawer + halo motion */
+@keyframes drawer-in {
+  from { opacity: 0; transform: translateX(18px) scale(0.98); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+.animate-drawer-in {
+  animation: drawer-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes halo-pulse {
+  0%   { box-shadow: 0 0 18px -2px rgba(34, 211, 238, 0.55); }
+  50%  { box-shadow: 0 0 30px 2px rgba(34, 211, 238, 0.75); }
+  100% { box-shadow: 0 0 18px -2px rgba(34, 211, 238, 0.55); }
+}
+.halo-pulse {
+  animation: halo-pulse 2.4s ease-in-out infinite;
+}
+
+/* Premium topology entrance: gentle fade + scale on first mount */
+@keyframes topo-entrance {
+  from { opacity: 0; transform: scale(0.985); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-topo-entrance {
+  animation: topo-entrance 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Liquid-glass surfaces (Apple-style premium) ── */
+.glass-strong {
+  background: rgba(13, 19, 33, 0.72);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 8px 32px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.glass-bar {
+  background: linear-gradient(180deg, rgba(20, 28, 46, 0.86), rgba(9, 13, 24, 0.80));
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 6px 24px -10px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+.glass-bar-bottom {
+  background: linear-gradient(0deg, rgba(20, 28, 46, 0.86), rgba(9, 13, 24, 0.80));
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 -6px 24px -10px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.09);
 }

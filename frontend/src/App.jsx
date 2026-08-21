@@ -205,17 +205,36 @@ export default function App() {
       setStatusMessage('Sample network loaded.');
     } else {
       // Offline fallback so the topology renders even without the pywebview backend
+      const sampleHosts = [
+        { ip: '192.168.1.1', mac: '00:0C:29:AA:01', vendor: 'VMware', primary_hostname: 'gateway', hostname: 'gateway', os: 'Router', risk_level: 'LOW', ports: [{ portid: '53', state: 'open', service: { name: 'domain' } }], tags: [] },
+        { ip: '192.168.1.20', mac: 'B8:27:EB:AA:02', vendor: 'Raspberry Pi', primary_hostname: 'pi', hostname: 'pi', os: 'Linux', risk_level: 'LOW', ports: [{ portid: '22', state: 'open', service: { name: 'ssh' } }], tags: [] },
+        { ip: '192.168.1.35', mac: '00:1B:FC:AA:03', vendor: 'ASUS', primary_hostname: 'router.asus', hostname: 'router.asus', os: 'ASUS', risk_level: 'MEDIUM', ports: [{ portid: '443', state: 'open', service: { name: 'https' } }], tags: [] },
+        { ip: '192.168.1.77', mac: '00:11:32:AA:04', vendor: 'Synology', primary_hostname: 'nas', hostname: 'nas', os: 'Linux', risk_level: 'HIGH', max_cvss: 8.1, ports: [{ portid: '445', state: 'open', service: { name: 'microsoft-ds' } }], tags: [] },
+        { ip: '192.168.1.90', mac: '08:00:27:AA:05', vendor: 'VirtualBox', primary_hostname: 'vm', hostname: 'vm', os: 'Windows', risk_level: 'CRITICAL', max_cvss: 9.8, ports: [{ portid: '3389', state: 'open', service: { name: 'ms-wbt' } }], tags: [] },
+      ];
+      const subnetCidr = '192.168.1.0/24';
+      const cyNodes = [
+        { data: { id: 'subnet-0', type: 'subnet', label: subnetCidr } },
+        ...sampleHosts.map((h) => ({
+          data: {
+            id: `host-${h.ip}`,
+            type: (h.os || '').toLowerCase().includes('router') ? 'router' : 'host',
+            label: h.primary_hostname || h.hostname || h.ip,
+            ip: h.ip, mac: h.mac, vendor: h.vendor, os: h.os,
+            risk_level: h.risk_level, max_cvss: h.max_cvss || 0,
+            ports: h.ports, alias: h.primary_hostname,
+          },
+        })),
+      ];
+      const cyEdges = [
+        { data: { id: 'e-subnet', source: 'subnet-0', target: 'subnet-0' } },
+        ...sampleHosts.map((h) => ({ data: { id: `e-${h.ip}`, source: 'subnet-0', target: `host-${h.ip}` } })),
+      ];
       const sample = {
-        success: true, target: '192.168.1.0/24', scan_profile: 'comprehensive',
-        hostsCount: 5, timestamp: new Date().toLocaleString(), logs: ['[offline] sample'],
-        data: { hosts: [
-          { ip: '192.168.1.1', mac: '00:0C:29:AA:01', vendor: 'VMware', primary_hostname: 'gateway', hostname: 'gateway', os: 'Router', risk_level: 'LOW', ports: [{ portid: '53', state: 'open', service: { name: 'domain' } }], tags: [] },
-          { ip: '192.168.1.20', mac: 'B8:27:EB:AA:02', vendor: 'Raspberry Pi', primary_hostname: 'pi', hostname: 'pi', os: 'Linux', risk_level: 'LOW', ports: [{ portid: '22', state: 'open', service: { name: 'ssh' } }], tags: [] },
-          { ip: '192.168.1.35', mac: '00:1B:FC:AA:03', vendor: 'ASUS', primary_hostname: 'router.asus', hostname: 'router.asus', os: 'ASUS', risk_level: 'MEDIUM', ports: [{ portid: '443', state: 'open', service: { name: 'https' } }], tags: [] },
-          { ip: '192.168.1.77', mac: '00:11:32:AA:04', vendor: 'Synology', primary_hostname: 'nas', hostname: 'nas', os: 'Linux', risk_level: 'HIGH', max_cvss: 8.1, ports: [{ portid: '445', state: 'open', service: { name: 'microsoft-ds' } }], tags: [] },
-          { ip: '192.168.1.90', mac: '08:00:27:AA:05', vendor: 'VirtualBox', primary_hostname: 'vm', hostname: 'vm', os: 'Windows', risk_level: 'CRITICAL', max_cvss: 9.8, ports: [{ portid: '3389', state: 'open', service: { name: 'ms-wbt' } }], tags: [] },
-        ], subnets: [{ cidr: '192.168.1.0/24', gateway: '192.168.1.1' }] },
-        cytoscape: { nodes: [], edges: [] }, ag_grid: [],
+        success: true, target: subnetCidr, scan_profile: 'comprehensive',
+        hostsCount: sampleHosts.length, timestamp: new Date().toLocaleString(), logs: ['[offline] sample'],
+        data: { hosts: sampleHosts, subnets: [{ cidr: subnetCidr, gateway: '192.168.1.1' }] },
+        cytoscape: { nodes: cyNodes, edges: cyEdges }, ag_grid: [],
       };
       setScanData(sample);
       setStatusMessage('Sample network loaded (offline).');
@@ -325,7 +344,7 @@ export default function App() {
       />
 
       {/* ── Tab Bar ── */}
-      <div className="px-6 border-b border-slate-800 bg-dark-950/90 flex items-center justify-between shrink-0">
+      <div className="px-6 glass-bar flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1">
           {TABS.map((tab) => (
             <button

@@ -16,7 +16,7 @@ export default function ConsoleDrawer({ logs = [], isScanning, isOpen, onToggle 
   }, [logs, isOpen]);
 
   return (
-    <div className={`shrink-0 border-t border-slate-800 bg-dark-950/95 backdrop-blur-sm transition-all duration-300 ${isOpen ? 'h-56' : 'h-9'}`}>
+    <div className={`shrink-0 glass-strong transition-all duration-300 ${isOpen ? 'h-56' : 'h-9'}`}>
       {/* Drawer handle */}
       <button
         onClick={onToggle}

@@ -7,7 +7,6 @@ Converts standard Nmap XML outputs into normalized JSON-serializable structures 
 """
 
 import ipaddress
-import json
 import logging
 import re
 from typing import Any, Dict, List, Optional, Union

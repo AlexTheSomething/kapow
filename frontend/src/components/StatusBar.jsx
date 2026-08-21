@@ -13,7 +13,7 @@ export default function StatusBar({
   const elapsed = summary?.elapsed || 0;
 
   return (
-    <footer className="h-9 px-4 border-t border-slate-800 bg-dark-950 flex items-center justify-between text-xs text-slate-400 shrink-0 select-none z-30">
+    <footer className="h-9 px-4 glass-bar-bottom flex items-center justify-between text-xs text-slate-400 shrink-0 select-none z-30">
       {/* Left: Status Message & Activity */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">

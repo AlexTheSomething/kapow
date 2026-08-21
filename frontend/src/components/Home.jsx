@@ -43,7 +43,7 @@ export default function Home({
   return (
     <div className="flex flex-col h-full w-full bg-dark-950 overflow-hidden select-none">
       {/* ── Compact Scan Bar ── */}
-      <div className="p-3 bg-dark-900 border-b border-slate-800 flex items-center gap-3 shrink-0">
+      <div className="p-3 glass-bar flex items-center gap-3 shrink-0 relative z-30">
         {/* Target input */}
         <div className="relative flex-1 max-w-md">
           <input
@@ -152,7 +152,7 @@ export default function Home({
 
         {/* Passive device indicator */}
         {passiveDevices.length > 0 && (
-          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-dark-950/90 border border-slate-700 text-[10px] text-slate-400 z-10">
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg glass-strong border border-slate-700/60 text-[10px] text-slate-300 z-10">
             <Wifi className="w-3 h-3 text-emerald-400" />
             <span>{passiveDevices.length} passively discovered</span>
           </div>
